@@ -2,4 +2,4 @@
 /.venv/
 __pycache__/
 .agents/skills/developing-with-streamlit
-.claude/skills/developing-with-streamlit>
+.claude/skills/developing-with-streamlit
