@@ -1,7 +1,9 @@
 import streamlit as st
 from auth.auth import authenticate_user, register_user
 
-
+#Login user using the authorization found in /auth/auth
+# User persistence token will be st.session.state.user if validated
+# We will use that same method to carry user info between pages
 def login_page():
     st.title("Welcome")
     login_tab, register_tab = st.tabs(["Log in", "Register"])
@@ -22,6 +24,8 @@ def login_page():
 
     with register_tab:
         with st.form("register_form"):
+            first_name = st.text_input("First name", key="register_first_name")
+            last_name = st.text_input("Last name", key="register_last_name")
             email = st.text_input("Email", key="register_email")
             password = st.text_input(
                 "Password",
@@ -40,9 +44,8 @@ def login_page():
             if password != confirmation:
                 st.error("Passwords do not match.")
             else:
-                created, message = register_user(email, password)
+                created, message = register_user(email, password, first_name, last_name)
                 if created:
                     st.success(message)
                 else:
                     st.error(message)
-    

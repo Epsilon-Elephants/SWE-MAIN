@@ -54,7 +54,13 @@ def _users_collection():
         return None
 
 
-def register_user(email: str, password: str) -> tuple[bool, str]:
+def register_user(
+    email: str, password: str, first_name: str, last_name: str
+) -> tuple[bool, str]:
+    first_name = first_name.strip()
+    last_name = last_name.strip()
+    if not first_name or not last_name:
+        return False, "Enter your first and last name."
     email = email.strip().lower()
     if not email or "@" not in email:
         return False, "Enter a valid email address."
@@ -69,6 +75,8 @@ def register_user(email: str, password: str) -> tuple[bool, str]:
         users.insert_one(
             {
                 "email": email,
+                "first_name": first_name,
+                "last_name": last_name,
                 "password_hash": _hash_password(password),
                 "created_at": datetime.now(timezone.utc),
             }
@@ -87,5 +95,10 @@ def authenticate_user(email: str, password: str) -> dict | None:
 
     user = users.find_one({"email": email.strip().lower()})
     if user and _verify_password(password, user.get("password_hash", "")):
-        return {"id": str(user["_id"]), "email": user["email"]}
+        return {
+            "id": str(user["_id"]),
+            "email": user["email"],
+            "first_name": user.get("first_name", ""),
+            "last_name": user.get("last_name", ""),
+        }
     return None
