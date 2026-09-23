@@ -1,13 +1,16 @@
 import streamlit as st
-from db.db import get_database
+from pages.login import login_page
+from pages.welcome import welcomePage
 
+if "user" not in st.session_state:
+	st.session_state.user = None
 
-st.write("Hello World")
-
-x = st.slider('x')
-st.write(x, 'squared is', x * x)
-
-db = get_database()
-
-test_out = db['test'].find_one({'email' : 'test@example.com'})
-st.write(test_out)
+if st.session_state.user is None:
+	login_page()
+else:
+	with st.sidebar:
+		st.write(f"Signed in as {st.session_state.user['email']}")
+		if st.button("Log out"):
+			st.session_state.user = None
+			st.rerun()
+	welcomePage()
