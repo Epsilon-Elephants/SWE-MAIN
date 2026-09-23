@@ -4,10 +4,12 @@ from pymongo.errors import PyMongoError
 from dotenv import load_dotenv
 import os
 
-load_dotenv()
-
 def get_database():
     # Get database Connection
+    load_dotenv()
+
+    #If working locally, loads creds from '.env' file
+    #If launching from cloud, loads creds from streamlit's 'secrets' file
     try:
         uri = os.getenv("DB_URI")
         db_name = os.getenv("DB_NAME")

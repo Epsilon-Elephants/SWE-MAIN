@@ -1,4 +1,7 @@
 import streamlit as st
 
 def welcomePage():
-    st.title(body="Welcome", text_alignment="center") # Add user name here later
+
+    #TODO
+    #Get username from auth token to print 'welcome, <name>'
+    st.title(body="Welcome", text_alignment="center")
