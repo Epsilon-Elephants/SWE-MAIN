@@ -1,7 +1,7 @@
 import streamlit as st
 from auth.auth import authenticate_user, register_user
 
-#Login user using the authorization found in /auth/auth
+# Login user using the authorization found in /auth/auth
 # User persistence token will be st.session.state.user if validated
 # We will use that same method to carry user info between pages
 def login_page():
@@ -15,9 +15,9 @@ def login_page():
             submitted = st.form_submit_button("Log in", type="primary")
 
         if submitted:
-            user = authenticate_user(email, password)
+            user, message = authenticate_user(email, password)
             if user is None:
-                st.error("Invalid email or password.")
+                st.error(message)
             else:
                 st.session_state.user = user
                 st.rerun()

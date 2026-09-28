@@ -1,3 +1,6 @@
+# Register and login of user. Hashing passwords
+
+
 import base64
 import hashlib
 import hmac
@@ -7,8 +10,9 @@ from datetime import datetime, timezone
 from pymongo.errors import DuplicateKeyError, PyMongoError
 
 from db.db import get_database
+from auth.rate_limit import use_attempt
 
-
+#Hashing passwords with SHA256
 def _hash_password(password: str, salt: bytes | None = None) -> str:
     salt = salt or secrets.token_bytes(16)
     password_hash = hashlib.scrypt(
@@ -22,7 +26,7 @@ def _hash_password(password: str, salt: bytes | None = None) -> str:
     encoded_hash = base64.b64encode(password_hash).decode("ascii")
     return f"scrypt${encoded_salt}${encoded_hash}"
 
-
+#Reversing the hash
 def _verify_password(password: str, stored_hash: str) -> bool:
     try:
         algorithm, encoded_salt, encoded_hash = stored_hash.split("$", 2)
@@ -41,7 +45,8 @@ def _verify_password(password: str, stored_hash: str) -> bool:
     except (ValueError, TypeError):
         return False
 
-
+#Gets db 'users' collection (table)
+#On first run (already done) will create it
 def _users_collection():
     try:
         database = get_database()
@@ -53,7 +58,7 @@ def _users_collection():
     except PyMongoError:
         return None
 
-
+# Registers a user using the hashed password and their email
 def register_user(
     email: str, password: str, first_name: str, last_name: str
 ) -> tuple[bool, str]:
@@ -61,6 +66,7 @@ def register_user(
     last_name = last_name.strip()
     if not first_name or not last_name:
         return False, "Enter your first and last name."
+
     email = email.strip().lower()
     if not email or "@" not in email:
         return False, "Enter a valid email address."
@@ -87,18 +93,25 @@ def register_user(
         return False, "Could not create the account. Try again later."
     return True, "Account created. You can now log in."
 
+#Given email and password, looks for email in db and compares password to unhashed pass
+def authenticate_user(email: str, password: str) -> tuple [dict | None, str]:
+    emailS = email.strip().lower()
 
-def authenticate_user(email: str, password: str) -> dict | None:
+    allowed, retry_after = use_attempt(
+        action="login",
+        identifier=emailS,
+        limit=5,
+        window_seconds=15*60
+    )
+    if not allowed:
+        return None, f"Too many attempts, Try again in {retry_after} seconds"
+    
     users = _users_collection()
-    if users is None:
-        return None
+    
 
-    user = users.find_one({"email": email.strip().lower()})
+    user = users.find_one({"email": emailS})
+    if users is None:
+        return None, "Login is temporarily unavailable."
     if user and _verify_password(password, user.get("password_hash", "")):
-        return {
-            "id": str(user["_id"]),
-            "email": user["email"],
-            "first_name": user.get("first_name", ""),
-            "last_name": user.get("last_name", ""),
-        }
-    return None
+        return {"id": str(user["_id"]), "email": user["email"]}, ""
+    return None, "Invalid Email or password"
