@@ -41,17 +41,18 @@ def increment_one(
     document_id: str,
     field: str,
     amount: int = 1,
+    on_insert: dict | None = None,
 ) -> dict:
-    """Atomically increment a numeric field and return the updated document.
-
-    A missing document is created; a missing field starts at zero before
-    incrementing. Use the same document ID for attempts in the same window.
-    MongoDB errors propagate to the caller.
-    """
+    
     collection = _get_collection(collection_name)
+    update = {"$inc": {field: amount}}
+
+    if on_insert:
+        update["$setOnInsert"] = on_insert
+
     return collection.find_one_and_update(
         {"_id": document_id},
-        {"$inc": {field: amount}},
+        update,
         upsert=True,
         return_document=ReturnDocument.AFTER,
     )
