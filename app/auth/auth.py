@@ -6,6 +6,7 @@ import hashlib
 import hmac
 import secrets
 from datetime import datetime, timezone
+import streamlit as st
 
 from pymongo.errors import DuplicateKeyError, PyMongoError
 
@@ -115,3 +116,8 @@ def authenticate_user(email: str, password: str) -> tuple [dict | None, str]:
     if user and _verify_password(password, user.get("password_hash", "")):
         return {"id": str(user["_id"]), "email": user["email"]}, ""
     return None, "Invalid Email or password"
+
+
+def log_out_user():
+    st.session_state.clear()
+    st.rerun()
