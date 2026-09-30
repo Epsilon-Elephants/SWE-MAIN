@@ -9,7 +9,6 @@ class studentDash(Dashboard):
     def load_dash(self):
         super().load_dash()
         client = rocky()
-        client.get_models()
         client.make_payload(inpt="Hello!")
         response = client.send_payload()
         st.write(response)
