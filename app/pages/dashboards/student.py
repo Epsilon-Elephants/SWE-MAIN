@@ -12,4 +12,4 @@ class studentDash(Dashboard):
         client.get_models()
         client.make_payload(inpt="Hello!")
         response = client.send_payload()
-        print(response)
+        st.write(response)
