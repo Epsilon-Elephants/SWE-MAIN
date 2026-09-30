@@ -114,13 +114,13 @@ def authenticate_user(email: str, password: str) -> tuple [dict | None, str]:
     if users is None:
         return None, "Login is temporarily unavailable."
     if user and _verify_password(password, user.get("password_hash", "")):
-        return {
+        return {{
             "id": str(user["_id"]),
             "email": user["email"],
             "first_name": user.get("first_name", ""),
             "last_name": user.get("last_name", ""),
-            "permissions": user.get("permissions")
-        }, ""
+            "permissions": user.get("permissions")}, ""
+        }
     return None
 
 def log_out_user():
