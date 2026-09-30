@@ -5,4 +5,4 @@ class adminDash(Dashboard):
     def __init__(self):
         super().__init__()
     def load_dash(self):
-        super.load_dash()
+        super().load_dash()
