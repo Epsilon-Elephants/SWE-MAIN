@@ -119,5 +119,6 @@ def authenticate_user(email: str, password: str) -> tuple [dict | None, str]:
             "email": user["email"],
             "first_name": user.get("first_name", ""),
             "last_name": user.get("last_name", ""),
+            "permissions": user.get("permissions")
         }
     return None
