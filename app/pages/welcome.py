@@ -1,5 +1,4 @@
 import streamlit as st
-from auth.auth import log_out_user
 from pages.dashboards.dashboard import Dashboard
 from pages.dashboards.admin import adminDash
 from pages.dashboards.professor import professorDash
