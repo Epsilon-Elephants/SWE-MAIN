@@ -1,7 +1,21 @@
 import streamlit as st
 from auth.auth import log_out_user
+from pages.dashboards.dashboard import Dashboard
+from pages.dashboards.admin import adminDash
+from pages.dashboards.professor import professorDash
+from pages.dashboards.student import studentDash
+
+dashboard_classes = {
+    "admin" : adminDash,
+    "professor": professorDash,
+    "student": studentDash
+}
 
 def welcomePage():
-    first_name = st.session_state.user.get("first_name")
-    st.title(body=f"Welcome {first_name}", text_alignment="center")
-    st.button(on_click=log_out_user, type="primary", label="Log Out")
+    dash = load_dash()
+    dash.load_dash()
+
+def load_dash() -> Dashboard:
+    return dashboard_classes[st.session_state.user.get("permissions")]()
+    
+    

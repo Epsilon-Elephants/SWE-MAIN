@@ -114,7 +114,11 @@ def authenticate_user(email: str, password: str) -> tuple [dict | None, str]:
     if users is None:
         return None, "Login is temporarily unavailable."
     if user and _verify_password(password, user.get("password_hash", "")):
-        return {"id": str(user["_id"]), "email": user["email"]}, ""
+        return {"id": str(user["_id"]), 
+                "email": user["email"],
+                "first_name": user["first_name"],
+                "last_name": user["last_name"],
+                "permissions": user["permissions"]}, ""
     return None, "Invalid Email or password"
 
 
