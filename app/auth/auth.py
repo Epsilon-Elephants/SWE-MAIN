@@ -110,18 +110,21 @@ def authenticate_user(email: str, password: str) -> tuple [dict | None, str]:
     users = _users_collection()
     
 
-    user = users.find_one({"email": emailS})
     if users is None:
         return None, "Login is temporarily unavailable."
+    try:
+        user = users.find_one({"email": emailS})
+    except PyMongoError:
+        return None, "Login is temporarily unavailable."
     if user and _verify_password(password, user.get("password_hash", "")):
-        return {{
+        return {
             "id": str(user["_id"]),
             "email": user["email"],
             "first_name": user.get("first_name", ""),
             "last_name": user.get("last_name", ""),
-            "permissions": user.get("permissions")}, ""
-        }
-    return None
+            "permissions": user.get("permissions"),
+        }, ""
+    return None, "Invalid email or password."
 
 def log_out_user():
     st.session_state.clear()
