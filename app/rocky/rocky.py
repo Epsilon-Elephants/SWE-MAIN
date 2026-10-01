@@ -23,6 +23,7 @@ class rocky():
         )
         models_response.raise_for_status()
         self.model = models_response.json()["data"][0]["id"]
+        self.payload = None
 
     #Prepares to send a payload to rocky
     def make_payload(self, inpt : str, max_tokens: int = 300, store : bool = False):
@@ -35,7 +36,10 @@ class rocky():
 
     #Sends saved payload to the endpoint, returns the response as a string
     def send_payload(self) -> str:
+        if not self.payload:
+            raise ValueError("Payload must be valid")
         response =  requests.post(self.url, headers=self.heads, json=self.payload, timeout=390)
         response.raise_for_status()
+        self.payload = None
         return response.json()["output_text"]
     
