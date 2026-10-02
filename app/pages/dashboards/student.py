@@ -8,7 +8,3 @@ class studentDash(Dashboard):
         super().__init__()
     def load_dash(self):
         super().load_dash()
-        client = rocky()
-        client.make_payload(inpt="Hello!")
-        response = client.send_payload()
-        st.write(response)
