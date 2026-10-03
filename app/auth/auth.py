@@ -4,6 +4,7 @@
 import base64
 import hashlib
 import hmac
+import logging
 import secrets
 from datetime import datetime, timezone
 import streamlit as st
@@ -12,6 +13,8 @@ from pymongo.errors import DuplicateKeyError, PyMongoError
 
 from db.db import get_database
 from auth.rate_limit import use_attempt
+
+logger = logging.getLogger(__name__)
 
 #Hashing passwords with SHA256
 def _hash_password(password: str, salt: bytes | None = None) -> str:
@@ -57,6 +60,7 @@ def _users_collection():
         users.create_index("email", unique=True)
         return users
     except PyMongoError:
+        logger.exception("Failed to initialize the users collection")
         return None
 
 # Registers a user using the hashed password and their email
@@ -86,11 +90,13 @@ def register_user(
                 "last_name": last_name,
                 "password_hash": _hash_password(password),
                 "created_at": datetime.now(timezone.utc),
+                "permissions" : "student"
             }
         )
     except DuplicateKeyError:
         return False, "An account with that email already exists."
     except PyMongoError:
+        logger.exception("Failed to insert a new user account")
         return False, "Could not create the account. Try again later."
     return True, "Account created. You can now log in."
 
