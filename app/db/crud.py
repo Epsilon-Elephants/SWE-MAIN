@@ -25,6 +25,12 @@ def read_one(collection_name: str, query: dict):
     return collection.find_one(query)
 
 
+# READ MANY: return all documents matching a query.
+def read_many(collection_name: str, query: dict):
+    collection = _get_collection(collection_name)
+    return list(collection.find(query))
+
+
 # UPDATE: change specific fields on a matching document.
 def update_one(collection_name: str, query: dict, fields: dict):
     collection = _get_collection(collection_name)
