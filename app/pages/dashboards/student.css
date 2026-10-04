@@ -1,0 +1,58 @@
+/* wide content area for 4 cards plus arrows to fit */
+.block-container { max-width: 1100px !important; margin: 0 auto !important; }
+
+ /* shape for option buttons */
+div.stButton > button { border-radius: 999px; width: 100%; }
+
+/* recently visited cards */
+.section-title { font-weight: 600; font-size: 1.05rem; margin-bottom: 0.6rem; }
+
+.card {
+   flex: 0 0 calc((100% - 4rem) / 4.3);
+   scroll-snap-align: start;
+   background: rgba(128,128,128, 0.15);
+   border-radius: 18px;
+   padding: 12px 12px 14px 12px;
+}
+
+.card .thumb {
+   background: rgba(128, 128, 128, 0.25);
+   border: 1px solid rgba(128, 128, 128, 0.5);
+   border-radius: 10px;
+   height: 110px;
+   margin-bottom: 10px;
+}
+
+.card .title { font-weight: 700; font-size: 0.85rem; }
+
+/* for carousel scrolling*/
+.recent-scroller {
+    display: flex;
+    gap: 1rem;
+    overflow-x: auto;
+    scroll-snap-type: x proximity;
+    scrollbar-width: thin;
+    padding-bottom: 8px;
+}
+
+/* to see the next card after the 4 thats already showing */
+.recent-scroller .card {
+    flex: 0 0 calc((100% - 4rem) / 4.3);
+    scroll-snap-align: start;
+}
+
+/* Rocky AI button pinned to bottom right side of screen */
+.st-key-student_rocky_button {
+    position: fixed;
+    right: 2rem;
+    bottom: 2rem;
+    z-index: 999;
+    width: auto;
+}
+
+.st-key-student_rocky_button button {
+    width: 4rem !important;
+    height: 4rem !important;
+}
+
+.st-key-student_rocky_button p { font-size: 0.8rem; }
