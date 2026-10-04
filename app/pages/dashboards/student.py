@@ -7,7 +7,7 @@ import base64
 import logging
 import streamlit.components.v1 as components
 
-"""placeholder until real data is added"""
+# placeholder until real data is added
 recently_visited = [
     "Models",
     "First Order Logic",
@@ -17,22 +17,27 @@ recently_visited = [
     "Proof Techniques",
 ]
 
+# labels under the search bar
 option = ["Homework", "Assignments", "Practice"]
 
 
-
+# path for Rocky icon image
 rocky_path = Path(__file__).resolve().parents[2] / "assets" / "rocky_icon.png"
+
+# path for css styling
 css_path = Path(__file__).resolve().parent / "student.css"
 
+# allows student.css be wrapped in style so the page can apply it
 def load_css() -> str:
     text = css_path.read_text(encoding="utf-8")
     lines = [line for line in text.splitlines() if line.strip()]
     return "<style>\n" + "\n".join(lines) + "\n</style>"
 
-
+# shows the Rocky icon in bottom right of the web-app
 def rocky_css() -> str:
    if not rocky_path.exists():
       return ""
+# turns the image into text so it can be placed in the CSS
    encoded = base64.b64encode(rocky_path.read_bytes()).decode("ascii")
    return f"""
 
@@ -49,7 +54,7 @@ def rocky_css() -> str:
 </style>
 """
 
-
+# script for when the mouse is hovering over "Recently visited" to move it left and right
 wheel_script = """
 <script>
 (function() {
@@ -73,25 +78,26 @@ wheel_script = """
 </script>
 """
 
-
+# Creates one Rocky AI per login session
 def get_rocky():
    if "rocky_client" not in st.session_state:
     load_dotenv()
     st.session_state.rocky_client = rocky()
     return st.session_state.rocky_client
 
+# dialogs for when Rocky is clicked
 @st.dialog("Rocky")
 def rocky_dialog() -> None:
-    st.caption("Need help? Ask Rocky!")
+    st.caption("Hi, I'm Rocky your AI assistant!")
     question = st.text_input(
-      "Your question",
+      "Ask a question:",
       placeholder="What is the difference between propositional and first order logic?",
       key="student_rocky_question",
    )
 
-    if st.button("Ask", key="student_rocky_ask", type="primary"):
+    if st.button("->", key="student_rocky_ask", type="primary"):
         if not question.strip():
-            st.warning("Ask a qustion first.")
+            st.warning("Ask a question first.")
         else:
             st.session_state.pop("student_rocky_answer", None)
         try:
@@ -108,14 +114,13 @@ def rocky_dialog() -> None:
             st.markdown(answer)
 
 
-
+# student dashboard
 class studentDash(Dashboard):
     def __init__(self):
         super().__init__()
-        
+# load/draw the whole page top to bottom        
     def load_dash(self):
         super().load_dash()
-      
 
         st.markdown(load_css() + rocky_css(), unsafe_allow_html=True)
 
@@ -126,6 +131,7 @@ class studentDash(Dashboard):
         self.render_recently_visited()
         self.render_rocky_button()
 
+# search bar with 3 buttons underneath
     def render_search(self):
         _, middle, _ = st.columns([1,2,1])
         with middle:
@@ -139,25 +145,29 @@ class studentDash(Dashboard):
             for col, label in zip(pill_cols, option):
                 col.button(label, key=f"student_filter_{label}", width="stretch")
 
-
+# the "Recently visited" sesction with placeholder cards that scroll sideways
     def render_recently_visited(self):
         st.markdown( 
             '<div class="section-title">Recently visited</div>',
             unsafe_allow_html=True,)
 
+# builds placeholder cards for each item in the list box with title
         cards ="".join(
             f'<div class="card"><div class="thumb"></div>'
             f'<div class="title">{title}</div></div>'
             for title in recently_visited
         )
 
+#puts all the cards in a scrolling row
         st.markdown(
             f'<div class="recent-scroller">{cards}</div>',
             unsafe_allow_html=True,
         )
 
+# loads the wheel scroll script
         components.html(wheel_script, height=0)
 
+# loads rocky button in botttom right corner 
     def render_rocky_button(self):
-        if st.button("Rocky", key="student_rocky_button", help="ask Rocky"):
+        if st.button("Rocky", key="student_rocky_button", help="Need help?"):
                     rocky_dialog()
