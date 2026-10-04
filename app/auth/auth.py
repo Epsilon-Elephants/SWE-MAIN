@@ -11,8 +11,8 @@ import streamlit as st
 
 from pymongo.errors import DuplicateKeyError, PyMongoError
 
-from db.db import get_database
-from auth.rate_limit import use_attempt
+from ..db.DataBase import db
+from .rate_limit import use_attempt
 
 logger = logging.getLogger(__name__)
 
@@ -53,12 +53,7 @@ def _verify_password(password: str, stored_hash: str) -> bool:
 #On first run (already done) will create it
 def _users_collection():
     try:
-        database = get_database()
-        if database is None:
-            return None
-        users = database["users"]
-        users.create_index("email", unique=True)
-        return users
+        return db.create_one("users", "email")
     except PyMongoError:
         logger.exception("Failed to initialize the users collection")
         return None
