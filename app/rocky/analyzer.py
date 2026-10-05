@@ -39,12 +39,14 @@ def analyze_student_weaknesses(attempts: list[dict], questions: list[dict]) -> L
         accuracy = stats["correct"] / stats["total"] if stats["total"] > 0 else 0.0
         weaknesses.append({
             "topic": topic,
-            "accuracy": round(accuracy, 2),
+            "accuracy": accuracy,
             "questions_attempted": stats["total"]
         })
 
     # sort lowest accuracy, then descending by attempts (more attempts = higher confidence in weakness)
     weaknesses.sort(key=lambda x: (x["accuracy"], -x["questions_attempted"]))
+    for weakness in weaknesses:
+        weakness["accuracy"] = round(weakness["accuracy"], 2)
 
     return weaknesses
 
