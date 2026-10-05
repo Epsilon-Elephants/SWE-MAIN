@@ -3,22 +3,30 @@ import json
 from collections.abc import Iterator
 from itertools import chain
 import requests
-import streamlit as st
+
+try:
+    import streamlit as st
+except ImportError:
+    st = None
+
 
 class rocky():
     def __init__(self):
-        #GRABBING key from env, if not st.secrets
+        # GRABBING key from env, if not st.secrets
         self.key = os.getenv("ROCKY_KEY")
-        if not self.key:
-            self.key = st.secrets["ROCKY_KEY"]
+        if not self.key and st is not None:
+            try:
+                self.key = st.secrets["ROCKY_KEY"]
+            except Exception:
+                pass
 
-        #URL given by CS dept for POST
+        # URL given by CS dept for POST
         self.url = "https://rocky.cs.kent.edu/v1/responses"
         
-        #HEADER for auth given by CS DEPT
+        # HEADER for auth given by CS DEPT
         self.heads = {"Authorization": f"Bearer {self.key}"}
 
-        #Finds the currently running model from the rocky endpoint
+        # Finds the currently running model from the rocky endpoint
         models_response = requests.get(
             "https://rocky.cs.kent.edu/v1/models",
             headers = self.heads,
@@ -28,7 +36,7 @@ class rocky():
         self.model = models_response.json()["data"][0]["id"]
         self.payload = None
 
-    #Prepares to send a payload to rocky
+    # Prepares to send a payload to rocky
     def make_payload(
         self, inpt: str, max_tokens: int = 300, store: bool = False,
         stream: bool = False,
