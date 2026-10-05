@@ -1,6 +1,6 @@
 import streamlit as st
 
-from app.pages.dashboards.dashboard import Dashboard
+from pages.dashboards.dashboard import Dashboard
 
 class professorDash(Dashboard):
     def __init__(self):

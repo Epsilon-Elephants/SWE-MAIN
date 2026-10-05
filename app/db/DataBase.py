@@ -26,7 +26,7 @@ class DataBase:
     _db = None
 
     def _get_db(self):
-        if self._db:
+        if self._db is not None:
             return self._db
         # Get database Connection
         load_dotenv()

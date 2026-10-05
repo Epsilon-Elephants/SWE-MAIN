@@ -1,7 +1,7 @@
 import math
 from datetime import datetime, timezone
 
-from app.db.DataBase import db
+from db.DataBase import db
 
 
 def use_attempt(

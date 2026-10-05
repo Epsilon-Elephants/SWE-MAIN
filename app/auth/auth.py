@@ -11,8 +11,8 @@ from datetime import datetime, timezone
 import streamlit as st
 from pymongo.errors import DuplicateKeyError, PyMongoError
 
-from app.auth.rate_limit import use_attempt
-from app.db.DataBase import db
+from db.DataBase import db
+from .rate_limit import use_attempt
 
 logger = logging.getLogger(__name__)
 

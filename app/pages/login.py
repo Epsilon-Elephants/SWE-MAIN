@@ -1,6 +1,6 @@
 import streamlit as st
 
-from app.auth.auth import authenticate_user, register_user
+from auth.auth import authenticate_user, register_user
 
 # Login user using the authorization found in /auth/auth
 # User persistence token will be st.session.state.user if validated
