@@ -6,4 +6,5 @@ class adminDash(Dashboard):
     def __init__(self):
         super().__init__()
     def load_dash(self):
+        st.title(body="Admin")
         super().load_dash()
