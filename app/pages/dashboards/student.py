@@ -158,7 +158,7 @@ class studentDash(Dashboard):
             for title in recently_visited
         )
 
-#puts all the cards in a scrolling row
+# puts all the cards in a scrolling row
         st.markdown(
             f'<div class="recent-scroller">{cards}</div>',
             unsafe_allow_html=True,

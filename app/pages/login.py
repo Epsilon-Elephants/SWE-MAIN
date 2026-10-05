@@ -7,7 +7,7 @@ from auth.auth import authenticate_user, register_user
 def login_page():
     st.title("Welcome")
     login_tab, register_tab = st.tabs(["Log in", "Register"])
-
+    
     with login_tab:
         with st.form("login_form"):
             email = st.text_input("Email", key="login_email")
