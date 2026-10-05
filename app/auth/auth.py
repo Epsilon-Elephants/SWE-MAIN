@@ -7,12 +7,12 @@ import hmac
 import logging
 import secrets
 from datetime import datetime, timezone
-import streamlit as st
 
+import streamlit as st
 from pymongo.errors import DuplicateKeyError, PyMongoError
 
-from ..db.DataBase import db
-from .rate_limit import use_attempt
+from app.auth.rate_limit import use_attempt
+from app.db.DataBase import db
 
 logger = logging.getLogger(__name__)
 

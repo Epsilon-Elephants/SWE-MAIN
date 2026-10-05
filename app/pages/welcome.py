@@ -1,8 +1,9 @@
 import streamlit as st
-from pages.dashboards.dashboard import Dashboard
-from pages.dashboards.admin import adminDash
-from pages.dashboards.professor import professorDash
-from pages.dashboards.student import studentDash
+
+from app.pages.dashboards.admin import adminDash
+from app.pages.dashboards.dashboard import Dashboard
+from app.pages.dashboards.professor import professorDash
+from app.pages.dashboards.student import studentDash
 
 dashboard_classes = {
     "admin" : adminDash,
