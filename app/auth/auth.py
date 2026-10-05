@@ -11,10 +11,11 @@ from datetime import datetime, timezone
 import streamlit as st
 from pymongo.errors import DuplicateKeyError, PyMongoError
 
-from db.DataBase import db
+from db.DataBase import DataBase
 from .rate_limit import use_attempt
 
 logger = logging.getLogger(__name__)
+database = DataBase()
 
 #Hashing passwords with SHA256
 def _hash_password(password: str, salt: bytes | None = None) -> str:
@@ -49,14 +50,14 @@ def _verify_password(password: str, stored_hash: str) -> bool:
     except (ValueError, TypeError):
         return False
 
-#Gets db 'users' collection (table)
-#On first run (already done) will create it
-def _users_collection():
+# Ensure the users collection has a unique email index.
+def _initialize_users_collection() -> bool:
     try:
-        return db.create_one("users", "email")
-    except PyMongoError:
+        database.create_one("users", "email")
+    except (PyMongoError, RuntimeError):
         logger.exception("Failed to initialize the users collection")
-        return None
+        return False
+    return True
 
 # Registers a user using the hashed password and their email
 def register_user(
@@ -73,24 +74,24 @@ def register_user(
     if len(password) < 8:
         return False, "Password must be at least 8 characters."
 
-    users = _users_collection()
-    if users is None:
+    if not _initialize_users_collection():
         return False, "The database is not configured."
 
     try:
-        users.insert_one(
+        database.insert_one(
+            "users",
             {
                 "email": email,
                 "first_name": first_name,
                 "last_name": last_name,
                 "password_hash": _hash_password(password),
                 "created_at": datetime.now(timezone.utc),
-                "permissions" : "student"
+                "permissions": "student",
             }
         )
     except DuplicateKeyError:
         return False, "An account with that email already exists."
-    except PyMongoError:
+    except (PyMongoError, RuntimeError):
         logger.exception("Failed to insert a new user account")
         return False, "Could not create the account. Try again later."
     return True, "Account created. You can now log in."
@@ -108,14 +109,11 @@ def authenticate_user(email: str, password: str) -> tuple [dict | None, str]:
     if not allowed:
         return None, f"Too many attempts, Try again in {retry_after} seconds"
     
-    users = _users_collection()
-    
-
-    if users is None:
+    if not _initialize_users_collection():
         return None, "Login is temporarily unavailable."
     try:
-        user = users.find_one({"email": emailS})
-    except PyMongoError:
+        user = database.read_one("users", {"email": emailS})
+    except (PyMongoError, RuntimeError):
         return None, "Login is temporarily unavailable."
     if user and _verify_password(password, user.get("password_hash", "")):
         return {
