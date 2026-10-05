@@ -1,4 +1,7 @@
+import os
+
 import streamlit as st
+
 from pages.dashboards.dashboard import Dashboard
 from rocky.rocky import rocky
 from dotenv import load_dotenv

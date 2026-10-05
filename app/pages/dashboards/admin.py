@@ -1,4 +1,5 @@
 import streamlit as st
+
 from pages.dashboards.dashboard import Dashboard
 
 class adminDash(Dashboard):

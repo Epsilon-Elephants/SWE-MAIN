@@ -1,6 +1,7 @@
 import streamlit as st
-from pages.dashboards.dashboard import Dashboard
+
 from pages.dashboards.admin import adminDash
+from pages.dashboards.dashboard import Dashboard
 from pages.dashboards.professor import professorDash
 from pages.dashboards.student import studentDash
 
