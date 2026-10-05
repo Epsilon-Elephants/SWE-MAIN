@@ -80,10 +80,26 @@ Problem IDs are strings embedded inside assignments, not separate MongoDB IDs.
 `app/db/models.py` describes `Question` and `Attempt` TypedDicts for analytics;
 these are not the embedded homework problem/submission schema and are not runtime
 database validators. `analyze_student_weaknesses(attempts, questions)` joins
-`Attempt.question_id` to `Question._id`, groups boolean correctness by topic, and
-sorts ascending accuracy, breaking ties by descending attempt count. Unknown or
-missing topics are skipped. It is not wired to homework grading, and
-`app/rocky/recommendation.py` is currently empty.
+`Attempt.question_id` to `Question._id` and groups actual boolean question grades
+or numeric assignment accuracy by topic. Both student and class analyzers retain
+full precision for ranking and threshold comparisons; prompts round only for
+display. Unknown topics and attempts without valid performance data are skipped.
+
+`app/rocky/data_adapter.py` reads scored `completed_assignments`. It divides each
+completion's points by the assignment total, or by summed problem points (one
+point by default, including legacy text problems). Each completion is one numeric
+observation with an assignment-scoped ID. It does not infer per-problem grades
+from the total. Mixed-topic assignments retain an assignment-specific category
+rather than claiming mastery of individual topics. Records with no reliable
+points denominator are excluded.
+
+`app/rocky/recommendation.py` builds student and class guidance using these
+analytics, validates Rocky's topic/reason fields, and falls back to known weak
+topics when the response is unusable. Empty histories return insufficient data
+without calling Rocky. Convenience calls own their engine/client, and reused
+engines serialize the complete payload transaction. The pipeline is not yet
+wired to the ungraded homework submission flow or dashboard UI; callers must
+enforce the access rules below before requesting database-backed reports.
 
 ## Access and scheduling rules
 
