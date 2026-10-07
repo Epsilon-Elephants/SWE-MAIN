@@ -5,8 +5,10 @@ from pymongo.errors import PyMongoError
 from dotenv import load_dotenv
 
 import os
+import re
 
 from pymongo.synchronous.database import Database
+from pymongo.collation import Collation
 
 
 def singleton(cls):
@@ -82,6 +84,43 @@ class DataBase:
     def find(self, collection_name: str, query: dict):
         collection = self._get_collection(collection_name)
         return collection.find(query)
+
+    def ensure_user_directory_indexes(self):
+        collection = self._get_collection("users")
+        for field in ("first_name", "last_name", "email", "permissions", "created_at"):
+            collection.create_index(
+                [(field, 1), ("_id", 1)],
+                name=f"admin_directory_{field}",
+                collation=Collation(locale="en", strength=2),
+            )
+
+    def list_users_page(
+        self, search="", sort_field="first_name", descending=False,
+        page=0, page_size=25,
+    ):
+        """Fetch only one page plus a lookahead; never retrieve password hashes."""
+        if sort_field not in {"first_name", "last_name", "email", "permissions", "created_at"}:
+            raise ValueError("Unsupported user sort field.")
+        if page < 0 or page_size not in (25, 50, 100):
+            raise ValueError("Invalid pagination settings.")
+
+        query = {}
+        if search.strip():
+            # Escape regex syntax so user input is always a literal substring.
+            pattern = re.escape(search.strip()[:100])
+            query = {"$or": [
+                {field: {"$regex": pattern, "$options": "i"}}
+                for field in ("first_name", "last_name", "email")
+            ]}
+        direction = -1 if descending else 1
+        cursor = self._get_collection("users").find(query, {
+            "_id": 0, "first_name": 1, "last_name": 1,
+            "email": 1, "permissions": 1, "created_at": 1,
+        }).collation(Collation(locale="en", strength=2)).sort([
+            (sort_field, direction), ("_id", direction),
+        ]).skip(page * page_size).limit(page_size + 1).max_time_ms(5000)
+        users = list(cursor)
+        return users[:page_size], len(users) > page_size
 
     # UPDATE: change specific fields on a matching document.
     def update_one(self, collection_name: str, query: dict, fields: dict):
