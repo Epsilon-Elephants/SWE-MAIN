@@ -8,6 +8,7 @@ from dotenv import load_dotenv
 from pathlib import Path
 import base64
 import logging
+import requests
 import streamlit.components.v1 as components
 
 # placeholder until real data is added
@@ -108,7 +109,16 @@ def rocky_dialog() -> None:
                     bot = get_rocky()
                     bot.make_payload(question.strip())
                     st.session_state.student_rocky_answer = bot.send_payload()
+            except requests.exceptions.Timeout:
+                st.session_state.pop("rocky_client", None)
+                logging.exception("Rocky request timed out")
+                st.error("Rocky timed out. Please try again shortly.")
+            except requests.exceptions.ConnectionError:
+                st.session_state.pop("rocky_client", None)
+                logging.exception("Could not connect to Rocky")
+                st.error("Unable to connect to Rocky. Please try again later.")
             except Exception:
+                st.session_state.pop("rocky_client", None)
                 logging.exception("Rocky request failed")
                 st.error("Rocky is unavailable right now. Please try again later.")
 
