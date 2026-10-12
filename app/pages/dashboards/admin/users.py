@@ -31,20 +31,22 @@ def load_users_page():
         st.error("You must be an admin to view users.")
         return
 
-    st.button(
+    _, back_column, _ = st.columns([1, 2, 1])
+    back_column.button(
         "Back to admin dashboard",
         key="return_to_admin_dashboard",
         on_click=_return_to_admin_dashboard,
+        width="stretch",
     )
 
-    st.title("Users")
+    st.title("Users", text_alignment="center")
     if message := st.session_state.pop("admin_users_success", None):
         st.success(message)
     search = st.text_input("Search by name or email", max_chars=100).strip()
     sort_column, order_column, size_column = st.columns(3)
     sort_label = sort_column.selectbox("Sort by", list(SORT_FIELDS))
     order = order_column.selectbox("Order", ["Ascending", "Descending"])
-    page_size = size_column.selectbox("Users per page", [25, 50, 100])
+    page_size = size_column.selectbox("Users per page", [10, 25, 50])
 
     settings = (search, sort_label, order, page_size)
     if st.session_state.get("admin_users_settings") != settings:

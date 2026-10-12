@@ -6,7 +6,10 @@ from dotenv import load_dotenv
 
 import os
 import re
+from datetime import datetime, timezone
 
+from bson import ObjectId
+from bson.errors import InvalidId
 from pymongo.synchronous.database import Database
 from pymongo.collation import Collation
 
@@ -101,7 +104,7 @@ class DataBase:
         """Fetch only one page plus a lookahead; never retrieve password hashes."""
         if sort_field not in {"first_name", "last_name", "email", "permissions", "created_at"}:
             raise ValueError("Unsupported user sort field.")
-        if page < 0 or page_size not in (25, 50, 100):
+        if page < 0 or page_size not in (10, 25, 50, 100):
             raise ValueError("Invalid pagination settings.")
 
         query = {}
@@ -121,6 +124,155 @@ class DataBase:
         ]).skip(page * page_size).limit(page_size + 1).max_time_ms(5000)
         users = list(cursor)
         return users[:page_size], len(users) > page_size
+
+    def ensure_class_admin_indexes(self):
+        self._get_collection("classes").create_index(
+            [("name", 1), ("_id", 1)],
+            name="admin_classes_name",
+            collation=Collation(locale="en", strength=2),
+        )
+        self._get_collection("students").create_index(
+            [("class_id", 1), ("user_id", 1)],
+            name="class_student_membership",
+            unique=True,
+        )
+
+    def list_classes_page(self, search="", page=0, page_size=25):
+        if page < 0 or page_size not in (10, 25, 50, 100):
+            raise ValueError("Invalid pagination settings.")
+        query = {}
+        if search.strip():
+            query["name"] = {"$regex": re.escape(search.strip()[:100]), "$options": "i"}
+        cursor = (
+            self._get_collection("classes")
+            .find(query, {"name": 1, "instructor_id": 1})
+            .collation(Collation(locale="en", strength=2))
+            .sort([("name", 1), ("_id", 1)])
+            .skip(page * page_size)
+            .limit(page_size + 1)
+            .max_time_ms(5000)
+        )
+        classes = list(cursor)
+        visible_classes = classes[:page_size]
+        instructor_ids = {
+            document.get("instructor_id")
+            for document in visible_classes
+            if document.get("instructor_id")
+        }
+        if instructor_ids:
+            instructors = self._get_collection("users").find(
+                {"_id": {"$in": list(instructor_ids)}, "permissions": "professor"},
+                {"first_name": 1, "last_name": 1, "email": 1},
+            ).max_time_ms(5000)
+            instructor_map = {instructor["_id"]: instructor for instructor in instructors}
+            for document in visible_classes:
+                document["instructor"] = instructor_map.get(document.get("instructor_id"))
+        return visible_classes, len(classes) > page_size
+
+    def list_instructors(self, limit=200):
+        if limit < 1 or limit > 500:
+            raise ValueError("Invalid instructor limit.")
+        cursor = (
+            self._get_collection("users")
+            .find(
+                {"permissions": "professor"},
+                {"first_name": 1, "last_name": 1, "email": 1},
+            )
+            .collation(Collation(locale="en", strength=2))
+            .sort([("last_name", 1), ("first_name", 1), ("_id", 1)])
+            .limit(limit)
+            .max_time_ms(5000)
+        )
+        return list(cursor)
+
+    def create_class(self, name: str, instructor_id):
+        name = name.strip()
+        if not name:
+            raise ValueError("Class name is required.")
+        if not instructor_id:
+            raise ValueError("Instructor is required.")
+        instructor_id = self._object_id(instructor_id, "instructor ID")
+        if self._get_collection("users").count_documents(
+            {"_id": instructor_id, "permissions": "professor"}, limit=1,
+        ) == 0:
+            raise ValueError("Select a valid instructor.")
+        return self.insert_one("classes", {
+            "name": name,
+            "instructor_id": instructor_id,
+        })
+
+    @staticmethod
+    def _object_id(value, label):
+        try:
+            return value if isinstance(value, ObjectId) else ObjectId(value)
+        except (InvalidId, TypeError) as error:
+            raise ValueError(f"Invalid {label}.") from error
+
+    def list_students_for_class(
+        self, class_id, enrolled: bool, search="", page=0, page_size=25,
+    ):
+        if page < 0 or page_size not in (10, 25, 50, 100):
+            raise ValueError("Invalid pagination settings.")
+        class_id = self._object_id(class_id, "class ID")
+        user_match = {"permissions": "student"}
+        if search.strip():
+            pattern = re.escape(search.strip()[:100])
+            user_match["$or"] = [
+                {field: {"$regex": pattern, "$options": "i"}}
+                for field in ("first_name", "last_name", "email")
+            ]
+        pipeline = [
+            {"$match": user_match},
+            {"$lookup": {
+                "from": "students",
+                "let": {"user_id": "$_id"},
+                "pipeline": [{"$match": {"$expr": {"$and": [
+                    {"$eq": ["$user_id", "$$user_id"]},
+                    {"$eq": ["$class_id", class_id]},
+                ]}}}],
+                "as": "membership",
+            }},
+            {"$match": {"membership.0": {"$exists": enrolled}}},
+            {"$project": {
+                "first_name": 1, "last_name": 1, "email": 1,
+                "grade": {"$arrayElemAt": ["$membership.grade", 0]},
+            }},
+            {"$sort": {"last_name": 1, "first_name": 1, "_id": 1}},
+            {"$skip": page * page_size},
+            {"$limit": page_size + 1},
+        ]
+        students = list(self._get_collection("users").aggregate(
+            pipeline,
+            collation=Collation(locale="en", strength=2),
+            maxTimeMS=5000,
+        ))
+        return students[:page_size], len(students) > page_size
+
+    def enroll_student(self, class_id, user_id):
+        class_id = self._object_id(class_id, "class ID")
+        user_id = self._object_id(user_id, "user ID")
+        if self._get_collection("classes").count_documents({"_id": class_id}, limit=1) == 0:
+            raise ValueError("That class no longer exists.")
+        if self._get_collection("users").count_documents(
+            {"_id": user_id, "permissions": "student"}, limit=1,
+        ) == 0:
+            raise ValueError("That user is not a student.")
+        return self._get_collection("students").update_one(
+            {"class_id": class_id, "user_id": user_id},
+            {"$setOnInsert": {
+                "created_at": datetime.now(timezone.utc),
+                "grade": {"earned": 0.0, "possible": 0.0},
+            }},
+            upsert=True,
+        )
+
+    def remove_student_from_class(self, class_id, user_id):
+        class_id = self._object_id(class_id, "class ID")
+        user_id = self._object_id(user_id, "user ID")
+        return self._get_collection("students").delete_one({
+            "class_id": class_id,
+            "user_id": user_id,
+        })
 
     # UPDATE: change specific fields on a matching document.
     def update_one(self, collection_name: str, query: dict, fields: dict):
