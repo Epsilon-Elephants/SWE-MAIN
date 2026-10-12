@@ -83,9 +83,9 @@ wheel_script = """
 
 # Creates one Rocky AI per login session
 def get_rocky():
-   if "rocky_client" not in st.session_state:
-    load_dotenv()
-    st.session_state.rocky_client = rocky()
+    if st.session_state.get("rocky_client") is None:
+        load_dotenv()
+        st.session_state.rocky_client = rocky()
     return st.session_state.rocky_client
 
 # dialogs for when Rocky is clicked
@@ -103,18 +103,18 @@ def rocky_dialog() -> None:
             st.warning("Ask a question first.")
         else:
             st.session_state.pop("student_rocky_answer", None)
-        try:
-            with st.spinner("Rocky is thinking..."):
-                bot = get_rocky()
-                bot.make_payload(question.strip())
-                st.session_state.student_rocky_answer = bot.send_payload()
-        except Exception:
-         logging.exception("Rocky request railed")
-         st.error("Rocky is unavailable right now. Please try again later.")
+            try:
+                with st.spinner("Rocky is thinking..."):
+                    bot = get_rocky()
+                    bot.make_payload(question.strip())
+                    st.session_state.student_rocky_answer = bot.send_payload()
+            except Exception:
+                logging.exception("Rocky request failed")
+                st.error("Rocky is unavailable right now. Please try again later.")
 
-         answer = st.session_state.get("student_rocky_answer")
-         if answer:
-            st.markdown(answer)
+    answer = st.session_state.get("student_rocky_answer")
+    if answer:
+        st.markdown(answer)
 
 
 # student dashboard
