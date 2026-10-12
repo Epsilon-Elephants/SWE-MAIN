@@ -1,15 +1,22 @@
 import logging
-from html import escape
 
 import streamlit as st
 from pymongo.errors import PyMongoError
 
 from db.DataBase import db
+from pages.dashboards.admin.components import render_admin_header
+from pages.dashboards.admin.styles import (
+    table_header_key,
+    table_row_key,
+    table_shell_key,
+)
 
 logger = logging.getLogger(__name__)
 
 CREATE_VIEW = "create"
 BROWSE_VIEW = "browse"
+ROSTER_DIALOG = "roster"
+ADD_STUDENTS_DIALOG = "add_students"
 
 
 @st.cache_resource
@@ -21,6 +28,7 @@ def _return_to_admin_dashboard():
     st.session_state.admin_page = "dashboard"
     st.session_state.pop("admin_classes_view", None)
     st.session_state.pop("admin_selected_class", None)
+    st.session_state.pop("admin_class_dialog", None)
 
 
 def _show_class_view(view):
@@ -39,6 +47,8 @@ def _select_class(class_id):
 
 def _clear_selected_class():
     st.session_state.pop("admin_selected_class", None)
+    st.session_state.pop("admin_class_dialog", None)
+    st.session_state.pop("admin_managed_student", None)
     st.session_state.admin_classes_view = BROWSE_VIEW
 
 
@@ -46,6 +56,25 @@ def _prepare_student_dialog():
     st.session_state.admin_enrolled_page = 0
     st.session_state.admin_available_page = 0
     st.session_state.pop("admin_class_dialog_success", None)
+    st.session_state.pop("admin_managed_student", None)
+
+
+def _open_student_dialog(dialog):
+    _prepare_student_dialog()
+    st.session_state.admin_class_dialog = dialog
+
+
+def _dismiss_student_dialog():
+    st.session_state.pop("admin_class_dialog", None)
+    st.session_state.pop("admin_managed_student", None)
+
+
+def _clear_managed_student():
+    st.session_state.pop("admin_managed_student", None)
+
+
+def _manage_student(student):
+    st.session_state.admin_managed_student = student
 
 
 def _student_label(student):
@@ -76,16 +105,51 @@ def _grade_label(student):
     return f"{earned:g}/{possible:g} ({percentage:.0f}%)"
 
 
+def _render_student_row(class_id, enrolled, student):
+    user_id = str(student["_id"])
+    if enrolled:
+        label, grade, action = st.columns([4, 1.5, 1])
+        grade.write(_grade_label(student))
+        button_label = "Manage"
+    else:
+        label, action = st.columns([5, 1])
+        button_label = "Add"
+    label.write(_student_label(student))
+    if enrolled:
+        action.button(
+            button_label,
+            key=f"class_manage_{class_id}_{user_id}",
+            on_click=_manage_student,
+            args=(student,),
+            width="stretch",
+        )
+    elif action.button(
+        button_label,
+        key=f"class_add_{class_id}_{user_id}",
+        width="stretch",
+    ):
+        try:
+            db.enroll_student(class_id, user_id)
+            message = f"Added {student.get('email', 'student')} to the class."
+        except (PyMongoError, RuntimeError, ValueError) as error:
+            logger.exception("Failed to change class enrollment")
+            st.error(str(error) if isinstance(error, ValueError) else "Could not update enrollment.")
+        else:
+            st.session_state.admin_class_dialog_success = message
+            st.rerun(scope="fragment")
+
+
 def _render_student_list(class_id, enrolled, search):
     state_key = "admin_enrolled_page" if enrolled else "admin_available_page"
     page = st.session_state.get(state_key, 0)
+    page_size = st.session_state.get("admin_default_page_size", 10)
     try:
         students, has_next = db.list_students_for_class(
             class_id=class_id,
             enrolled=enrolled,
             search=search,
             page=page,
-            page_size=10,
+            page_size=page_size,
         )
     except (PyMongoError, RuntimeError, ValueError):
         logger.exception("Failed to load students for a class")
@@ -94,33 +158,21 @@ def _render_student_list(class_id, enrolled, search):
 
     if not students:
         st.info("No students found.")
-    for student in students:
-        user_id = str(student["_id"])
-        if enrolled:
-            label, grade, action = st.columns([4, 1.5, 1])
-            grade.write(_grade_label(student))
-        else:
-            label, action = st.columns([5, 1])
-        label.write(_student_label(student))
-        button_label = "Remove" if enrolled else "Add"
-        if action.button(
-            button_label,
-            key=f"class_{'remove' if enrolled else 'add'}_{class_id}_{user_id}",
-            width="stretch",
-        ):
-            try:
+    else:
+        table_name = "roster" if enrolled else "available_students"
+        with st.container(key=table_shell_key(table_name), gap=None):
+            with st.container(key=table_header_key(table_name), gap=None):
                 if enrolled:
-                    db.remove_student_from_class(class_id, user_id)
-                    message = f"Removed {student.get('email', 'student')} from the class."
+                    heading = st.columns([4, 1.5, 1])
+                    labels = ["Student", "Grade", ""]
                 else:
-                    db.enroll_student(class_id, user_id)
-                    message = f"Added {student.get('email', 'student')} to the class."
-            except (PyMongoError, RuntimeError, ValueError) as error:
-                logger.exception("Failed to change class enrollment")
-                st.error(str(error) if isinstance(error, ValueError) else "Could not update enrollment.")
-            else:
-                st.session_state.admin_class_dialog_success = message
-                st.rerun(scope="fragment")
+                    heading = st.columns([5, 1])
+                    labels = ["Student", ""]
+                for column, label in zip(heading, labels):
+                    column.write(label)
+            for index, student in enumerate(students):
+                with st.container(key=table_row_key(table_name, index), gap=None):
+                    _render_student_row(class_id, enrolled, student)
 
     st.caption(f"Page {page + 1} · {len(students)} students on this page")
     previous, next_page = st.columns(2)
@@ -140,9 +192,74 @@ def _render_student_list(class_id, enrolled, search):
         st.rerun(scope="fragment")
 
 
+def _render_managed_student(class_id, student):
+    back_column, _ = st.columns([1, 4])
+    back_column.button(
+        "← Roster",
+        key="back_to_class_roster",
+        on_click=_clear_managed_student,
+        type="tertiary",
+    )
+    st.subheader(_student_label(student))
+
+    grade = student.get("grade") or {"earned": 0, "possible": 0}
+    earned = grade.get("earned", 0)
+    possible = grade.get("possible", 0)
+    if hasattr(earned, "to_decimal"):
+        earned = earned.to_decimal()
+    if hasattr(possible, "to_decimal"):
+        possible = possible.to_decimal()
+
+    with st.form("admin_force_grade_update"):
+        earned_column, possible_column = st.columns(2)
+        new_earned = earned_column.number_input(
+            "Points earned", min_value=0.0, value=float(earned), step=1.0,
+        )
+        new_possible = possible_column.number_input(
+            "Points possible", min_value=0.0, value=float(possible), step=1.0,
+        )
+        save_grade = st.form_submit_button(
+            "Update grade", type="primary", width="stretch",
+        )
+    if save_grade:
+        try:
+            db.update_student_grade(
+                class_id, student["_id"], new_earned, new_possible,
+            )
+        except (PyMongoError, RuntimeError, ValueError) as error:
+            logger.exception("Failed to force-update a student grade")
+            st.error(str(error) if isinstance(error, ValueError) else "Could not update the grade.")
+        else:
+            st.session_state.admin_managed_student = {
+                **student,
+                "grade": {"earned": new_earned, "possible": new_possible},
+            }
+            st.success("Grade updated.")
+
+    st.divider()
+    if st.button(
+        "Remove from class",
+        key="remove_managed_student",
+        width="stretch",
+    ):
+        try:
+            db.remove_student_from_class(class_id, student["_id"])
+        except (PyMongoError, RuntimeError, ValueError):
+            logger.exception("Failed to remove a student from a class")
+            st.error("Could not remove the student from this class.")
+        else:
+            _clear_managed_student()
+            st.session_state.admin_class_dialog_success = "Student removed from the class."
+            st.rerun(scope="fragment")
+
+
 def _render_student_dialog(class_id, enrolled):
     if message := st.session_state.pop("admin_class_dialog_success", None):
         st.success(message)
+    managed_student = st.session_state.get("admin_managed_student")
+    if enrolled and managed_student:
+        _render_managed_student(class_id, managed_student)
+        return
     view_name = "roster" if enrolled else "add"
     search = st.text_input(
         "Search students by name or email",
@@ -157,55 +274,47 @@ def _render_student_dialog(class_id, enrolled):
     _render_student_list(class_id, enrolled, search)
 
 
-@st.dialog("Class roster", width="large")
+@st.dialog(
+    "Class roster", width="large", on_dismiss=_dismiss_student_dialog,
+)
 def _show_roster_dialog(class_id):
     _render_student_dialog(class_id, enrolled=True)
 
 
-@st.dialog("Add students", width="large")
+@st.dialog(
+    "Add students", width="large", on_dismiss=_dismiss_student_dialog,
+)
 def _show_add_students_dialog(class_id):
     _render_student_dialog(class_id, enrolled=False)
 
 
-def _render_selected_class(class_id, class_name):
-    _, back_column, _ = st.columns([1, 2, 1])
-    back_column.button(
-        "Back to classes",
-        key="back_to_classes",
-        on_click=_clear_selected_class,
-        width="stretch",
-    )
-    st.markdown(
-        f"<h2 style='text-align:center'>{escape(class_name)}</h2>",
-        unsafe_allow_html=True,
-    )
-
+def _render_selected_class(class_id):
     _, actions, _ = st.columns([1, 2, 1])
     roster_column, add_column = actions.columns(2)
-    if roster_column.button(
+    roster_column.button(
         "View roster",
         key="show_class_roster",
+        on_click=_open_student_dialog,
+        args=(ROSTER_DIALOG,),
         width="stretch",
-    ):
-        _prepare_student_dialog()
-        _show_roster_dialog(class_id)
-    if add_column.button(
+    )
+    add_column.button(
         "Add students",
         key="show_add_students",
+        on_click=_open_student_dialog,
+        args=(ADD_STUDENTS_DIALOG,),
         width="stretch",
-    ):
-        _prepare_student_dialog()
+    )
+
+    dialog = st.session_state.get("admin_class_dialog")
+    if dialog == ROSTER_DIALOG:
+        _show_roster_dialog(class_id)
+    elif dialog == ADD_STUDENTS_DIALOG:
         _show_add_students_dialog(class_id)
 
 
 def _render_create_class():
     _, content, _ = st.columns([1, 2, 1])
-    content.button(
-        "Back to class options",
-        key="create_back_to_class_options",
-        on_click=_show_class_options,
-        width="stretch",
-    )
     try:
         instructors = db.list_instructors()
     except (PyMongoError, RuntimeError, ValueError):
@@ -243,22 +352,16 @@ def _render_create_class():
 
 
 def _render_class_search():
-    _, back_column, _ = st.columns([1, 2, 1])
-    back_column.button(
-        "Back to class options",
-        key="browse_back_to_class_options",
-        on_click=_show_class_options,
-        width="stretch",
-    )
     search = st.text_input("Search classes", max_chars=100).strip()
-    settings = (search, 10)
+    page_size = st.session_state.get("admin_default_page_size", 10)
+    settings = (search, page_size)
     if st.session_state.get("admin_classes_settings") != settings:
         st.session_state.admin_classes_settings = settings
         st.session_state.admin_classes_page = 0
     page = st.session_state.get("admin_classes_page", 0)
 
     try:
-        classes, has_next = db.list_classes_page(search, page, 10)
+        classes, has_next = db.list_classes_page(search, page, page_size)
     except (PyMongoError, RuntimeError, ValueError):
         logger.exception("Failed to load classes")
         st.error("Could not load classes. Try again.")
@@ -266,18 +369,27 @@ def _render_class_search():
 
     if not classes:
         st.info("No classes found.")
-    for class_document in classes:
-        class_id = str(class_document["_id"])
-        name_column, instructor_column, manage_column = st.columns([2, 3, 1])
-        name_column.write(class_document["name"])
-        instructor_column.write(_instructor_label(class_document.get("instructor")))
-        manage_column.button(
-            "Manage",
-            key=f"manage_class_{class_id}",
-            on_click=_select_class,
-            args=(class_id,),
-            width="stretch",
-        )
+    else:
+        with st.container(key=table_shell_key("classes"), gap=None):
+            with st.container(key=table_header_key("classes"), gap=None):
+                heading = st.columns([2, 3, 1])
+                for column, label in zip(heading, ["Class", "Instructor", ""]):
+                    column.write(label)
+            for index, class_document in enumerate(classes):
+                with st.container(key=table_row_key("classes", index), gap=None):
+                    class_id = str(class_document["_id"])
+                    name_column, instructor_column, manage_column = st.columns([2, 3, 1])
+                    name_column.write(class_document["name"])
+                    instructor_column.write(
+                        _instructor_label(class_document.get("instructor"))
+                    )
+                    manage_column.button(
+                        "Manage",
+                        key=f"manage_class_{class_id}",
+                        on_click=_select_class,
+                        args=(class_id,),
+                        width="stretch",
+                    )
 
     st.caption(f"Page {page + 1} · {len(classes)} classes on this page")
     previous, next_page = st.columns(2)
@@ -300,17 +412,6 @@ def load_classes_page():
         st.error("You must be an admin to manage classes.")
         return
 
-    _, back_column, _ = st.columns([1, 2, 1])
-    back_column.button(
-        "Back to admin dashboard",
-        key="classes_return_to_admin",
-        on_click=_return_to_admin_dashboard,
-        width="stretch",
-    )
-    st.title("Classes", text_alignment="center")
-    if message := st.session_state.pop("admin_classes_success", None):
-        st.success(message)
-
     try:
         _ensure_class_indexes()
     except (PyMongoError, RuntimeError):
@@ -325,36 +426,75 @@ def load_classes_page():
         except (PyMongoError, RuntimeError, ValueError):
             selected = None
         if selected:
-            _render_selected_class(selected_id, selected["name"])
+            render_admin_header(
+                selected["name"],
+                "Manage the roster and student grades.",
+                back_label="Classes",
+                back_callback=_clear_selected_class,
+                back_key="back_to_classes",
+            )
+            if message := st.session_state.pop("admin_classes_success", None):
+                st.success(message)
+            _render_selected_class(selected_id)
             return
         st.session_state.pop("admin_selected_class", None)
         st.warning("That class no longer exists.")
 
     class_view = st.session_state.get("admin_classes_view")
     if class_view == CREATE_VIEW:
+        render_admin_header(
+            "Create class",
+            "Choose a class name and instructor.",
+            back_label="Classes",
+            back_callback=_show_class_options,
+            back_key="create_back_to_classes",
+        )
         _render_create_class()
         return
     if class_view == BROWSE_VIEW:
+        render_admin_header(
+            "Manage classes",
+            "Search for a class to manage its roster.",
+            back_label="Classes",
+            back_callback=_show_class_options,
+            back_key="browse_back_to_classes",
+        )
         _render_class_search()
         return
 
+    render_admin_header(
+        "Classes",
+        "Create a class or manage an existing one.",
+        back_label="Admin",
+        back_callback=_return_to_admin_dashboard,
+        back_key="classes_return_to_admin",
+    )
+    if message := st.session_state.pop("admin_classes_success", None):
+        st.success(message)
     st.markdown(
         "<p style='text-align:center'>Choose what you want to do.</p>",
         unsafe_allow_html=True,
     )
-    _, actions, _ = st.columns([1, 2, 1])
-    actions.button(
-        "Create a class",
-        type="primary",
-        key="show_create_class",
-        on_click=_show_class_view,
-        args=(CREATE_VIEW,),
-        width="stretch",
-    )
-    actions.button(
-        "Find and manage a class",
-        key="show_browse_classes",
-        on_click=_show_class_view,
-        args=(BROWSE_VIEW,),
-        width="stretch",
-    )
+    _, actions, _ = st.columns([0.5, 3, 0.5])
+    create_column, browse_column = actions.columns(2)
+    with create_column.container(key="admin_create_card"):
+        st.markdown("### Create")
+        st.caption("Start a class and assign its instructor.")
+        st.button(
+            "Create a class",
+            type="primary",
+            key="show_create_class",
+            on_click=_show_class_view,
+            args=(CREATE_VIEW,),
+            width="stretch",
+        )
+    with browse_column.container(key="admin_browse_card"):
+        st.markdown("### Manage")
+        st.caption("Open a class to manage students and grades.")
+        st.button(
+            "Find and manage a class",
+            key="show_browse_classes",
+            on_click=_show_class_view,
+            args=(BROWSE_VIEW,),
+            width="stretch",
+        )

@@ -1,0 +1,70 @@
+[class*="st-key-admin_table_shell_"] {
+    overflow: hidden;
+    gap: 0 !important;
+    border: 1px solid rgba(128, 128, 128, 0.42);
+    border-radius: 14px;
+    background: rgba(128, 128, 128, 0.06);
+}
+
+[class*="st-key-admin_table_shell_"] > [data-testid="stVerticalBlock"],
+[class*="st-key-admin_table_shell_"] [data-testid="stVerticalBlock"] {
+    gap: 0;
+}
+
+[class*="st-key-admin_table_header_"] {
+    padding: 0.7rem 0.85rem;
+    background: rgba(90, 110, 145, 0.28);
+    border-bottom: 1px solid rgba(128, 128, 128, 0.42);
+    font-weight: 700;
+}
+
+[class*="st-key-admin_table_row_"] {
+    padding: 0.55rem 0.85rem;
+    border-bottom: 1px solid rgba(128, 128, 128, 0.24);
+    transition: background-color 120ms ease;
+}
+
+[class*="st-key-admin_table_row_even_"] {
+    background: rgba(128, 128, 128, 0.07);
+}
+
+[class*="st-key-admin_table_row_odd_"] {
+    background: rgba(128, 128, 128, 0.18);
+}
+
+[class*="st-key-admin_table_row_"]:hover {
+    background: rgba(90, 130, 190, 0.2);
+}
+
+[class*="st-key-admin_table_row_"]:last-child {
+    border-bottom: 0;
+}
+
+[class*="st-key-admin_table_header_"] [data-testid="stHorizontalBlock"],
+[class*="st-key-admin_table_row_"] [data-testid="stHorizontalBlock"] {
+    align-items: center;
+    min-height: 2.75rem;
+}
+
+[class*="st-key-admin_table_header_"] p,
+[class*="st-key-admin_table_row_"] p {
+    margin: 0;
+}
+
+[class*="st-key-admin_table_row_"] [data-testid="stForm"] {
+    margin-top: 0.55rem;
+    padding: 0.75rem;
+    border-color: rgba(128, 128, 128, 0.3);
+    background: rgba(0, 0, 0, 0.08);
+}
+
+[class*="st-key-user_expand_"] button {
+    min-width: 2.6rem;
+    min-height: 2.6rem;
+    padding: 0.2rem;
+}
+
+[class*="st-key-user_expand_"] button p {
+    font-size: 1.55rem;
+    line-height: 1;
+}

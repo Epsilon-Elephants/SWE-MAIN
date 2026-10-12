@@ -6,6 +6,7 @@ from dotenv import load_dotenv
 
 import os
 import re
+import math
 from datetime import datetime, timezone
 
 from bson import ObjectId
@@ -273,6 +274,29 @@ class DataBase:
             "class_id": class_id,
             "user_id": user_id,
         })
+
+    def update_student_grade(self, class_id, user_id, earned, possible):
+        class_id = self._object_id(class_id, "class ID")
+        user_id = self._object_id(user_id, "user ID")
+        try:
+            earned = float(earned)
+            possible = float(possible)
+        except (TypeError, ValueError) as error:
+            raise ValueError("Grade values must be numbers.") from error
+        if not math.isfinite(earned) or not math.isfinite(possible):
+            raise ValueError("Grade values must be finite numbers.")
+        if earned < 0 or possible < 0:
+            raise ValueError("Grade values cannot be negative.")
+        if possible == 0 and earned != 0:
+            raise ValueError("Earned points must be 0 when possible points are 0.")
+
+        result = self._get_collection("students").update_one(
+            {"class_id": class_id, "user_id": user_id},
+            {"$set": {"grade": {"earned": earned, "possible": possible}}},
+        )
+        if result.matched_count == 0:
+            raise ValueError("That student is no longer enrolled in this class.")
+        return result
 
     # UPDATE: change specific fields on a matching document.
     def update_one(self, collection_name: str, query: dict, fields: dict):

@@ -4,6 +4,12 @@ import streamlit as st
 from pymongo.errors import PyMongoError
 
 from db.DataBase import db
+from pages.dashboards.admin.components import render_admin_header
+from pages.dashboards.admin.styles import (
+    table_header_key,
+    table_row_key,
+    table_shell_key,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -31,22 +37,27 @@ def load_users_page():
         st.error("You must be an admin to view users.")
         return
 
-    _, back_column, _ = st.columns([1, 2, 1])
-    back_column.button(
-        "Back to admin dashboard",
-        key="return_to_admin_dashboard",
-        on_click=_return_to_admin_dashboard,
-        width="stretch",
+    render_admin_header(
+        "Users",
+        "Find accounts and manage access.",
+        back_label="Admin",
+        back_callback=_return_to_admin_dashboard,
+        back_key="return_to_admin_dashboard",
     )
-
-    st.title("Users", text_alignment="center")
     if message := st.session_state.pop("admin_users_success", None):
         st.success(message)
     search = st.text_input("Search by name or email", max_chars=100).strip()
     sort_column, order_column, size_column = st.columns(3)
     sort_label = sort_column.selectbox("Sort by", list(SORT_FIELDS))
     order = order_column.selectbox("Order", ["Ascending", "Descending"])
-    page_size = size_column.selectbox("Users per page", [10, 25, 50])
+    page_sizes = [10, 25, 50]
+    default_page_size = st.session_state.get("admin_default_page_size", 10)
+    page_size = size_column.selectbox(
+        "Users per page",
+        page_sizes,
+        index=page_sizes.index(default_page_size),
+        key="admin_users_page_size",
+    )
 
     settings = (search, sort_label, order, page_size)
     if st.session_state.get("admin_users_settings") != settings:
@@ -69,53 +80,13 @@ def load_users_page():
         return
 
     if users:
-        st.html("""
-            <style>
-            .st-key-admin_users_table {
-                gap: 0;
-                border: 1px solid #606060;
-                border-radius: 0.5rem;
-                overflow: hidden;
-                background: #111111;
-                color: #f5f5f5;
-            }
-            .st-key-admin_users_table [data-testid="stVerticalBlock"] { gap: 0; }
-            .st-key-admin_users_table [class*="st-key-admin_user_row_"] {
-                border-top: 1px solid #404040;
-                background: #111111;
-            }
-            .st-key-admin_users_table [class*="st-key-admin_user_row_odd_"] {
-                background: #282828;
-            }
-            .st-key-admin_users_table [data-testid="stHorizontalBlock"] {
-                align-items: center;
-                min-height: 3.5rem;
-                padding: 0.5rem 0.75rem;
-            }
-            .st-key-admin_users_table [data-testid="stMarkdownContainer"] p {
-                margin: 0;
-            }
-            .st-key-admin_users_table [data-testid="stForm"] {
-                border: 0;
-                padding: 0.5rem 0.75rem;
-            }
-            .st-key-admin_users_table [data-testid="stButton"] button {
-                min-width: 2.75rem;
-                min-height: 2.5rem;
-                color: #f5f5f5;
-            }
-            .st-key-admin_users_table [data-testid="stButton"] button p {
-                font-size: 1.5rem;
-            }
-            </style>
-        """)
-        with st.container(key="admin_users_table", gap=None):
-            heading = st.columns([0.5, 2, 3, 1.5], gap="small")
-            for column, label in zip(heading, ["", "Name", "Email", "Permissions"]):
-                column.write(label)
+        with st.container(key=table_shell_key("users"), gap=None):
+            with st.container(key=table_header_key("users"), gap=None):
+                heading = st.columns([0.5, 2, 3, 1.5], gap="small")
+                for column, label in zip(heading, ["", "Name", "Email", "Permissions"]):
+                    column.write(label)
             for index, user in enumerate(users):
-                stripe = "odd" if index % 2 else "even"
-                with st.container(key=f"admin_user_row_{stripe}_{index}", gap=None):
+                with st.container(key=table_row_key("users", index), gap=None):
                     email = user.get("email", "")
                     name = " ".join(filter(None, [user.get("first_name"), user.get("last_name")]))
                     current_role = user.get("permissions", "")

@@ -64,6 +64,20 @@ class TestAdminClasses(unittest.TestCase):
         self.assertEqual(update["$setOnInsert"]["grade"], {"earned": 0.0, "possible": 0.0})
         self.assertTrue(students.update_one.call_args.kwargs["upsert"])
 
+    def test_force_grade_update_validates_and_updates_enrollment(self):
+        class_id = ObjectId()
+        user_id = ObjectId()
+        students = MagicMock()
+        students.update_one.return_value.matched_count = 1
+        with patch.object(db, "_get_collection", return_value=students):
+            db.update_student_grade(str(class_id), str(user_id), 18, 20)
+        students.update_one.assert_called_once_with(
+            {"class_id": class_id, "user_id": user_id},
+            {"$set": {"grade": {"earned": 18.0, "possible": 20.0}}},
+        )
+        with self.assertRaises(ValueError):
+            db.update_student_grade(str(class_id), str(user_id), 1, 0)
+
     def test_admin_button_opens_class_manager(self):
         test_app = AppTest.from_string('''
 import streamlit as st
@@ -112,6 +126,38 @@ load_classes_page()
             self.assertFalse(test_app.exception)
             self.assertEqual(test_app.text_input[0].label, "Search students by name or email")
             self.assertTrue(test_app.get("dialog"))
+
+    def test_roster_manage_student_updates_grade(self):
+        class_id = ObjectId()
+        student_id = ObjectId()
+        student = {
+            "_id": student_id,
+            "first_name": "Ada",
+            "last_name": "Lovelace",
+            "email": "ada@example.com",
+            "grade": {"earned": 0.0, "possible": 0.0},
+        }
+        test_app = AppTest.from_string(f'''
+import streamlit as st
+from pages.dashboards.admin.classes import load_classes_page
+st.session_state.user = {{"permissions": "admin"}}
+st.session_state.admin_selected_class = "{class_id}"
+load_classes_page()
+''')
+        with patch.object(db, "ensure_class_admin_indexes"), patch.object(
+            db, "read_one", return_value={"_id": class_id, "name": "Logic"},
+        ), patch.object(
+            db, "list_students_for_class", return_value=([student], False),
+        ), patch.object(db, "update_student_grade", return_value=MagicMock()) as update:
+            test_app.run()
+            test_app.button(key="show_class_roster").click().run()
+            test_app.button(key=f"class_manage_{class_id}_{student_id}").click().run()
+            self.assertEqual(len(test_app.number_input), 2)
+            test_app.number_input[0].set_value(18)
+            test_app.number_input[1].set_value(20)
+            next(button for button in test_app.button if button.label == "Update grade").click().run()
+            update.assert_called_once_with(str(class_id), student_id, 18.0, 20.0)
+            self.assertTrue(test_app.success)
 
 
 if __name__ == "__main__":
