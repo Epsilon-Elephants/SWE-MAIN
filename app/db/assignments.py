@@ -59,8 +59,8 @@ def update_assignment(
     title = title.strip()
     if not title:
         raise ValueError("Assignment title is required.")
-    if status not in ("draft", "published"):
-        raise ValueError("Assignment status must be draft or published.")
+    if status not in ("draft", "published", "closed"):
+        raise ValueError("Assignment status must be draft, published, or closed.")
 
     fields = {
         "title": title,

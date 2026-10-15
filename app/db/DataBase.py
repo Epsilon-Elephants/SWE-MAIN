@@ -138,10 +138,15 @@ class DataBase:
             unique=True,
         )
 
-    def list_classes_page(self, search="", page=0, page_size=25):
+    def list_classes_page(self, search="", page=0, page_size=25, instructor_id=None, active_only=False):
         if page < 0 or page_size not in (10, 25, 50, 100):
             raise ValueError("Invalid pagination settings.")
         query = {}
+        if active_only:
+            query["status"] = {"$nin": ["closed", "archived", "completed", "inactive", "cancelled"]}
+            query["active"] = {"$ne": False}
+        if instructor_id is not None:
+            query["instructor_id"] = self._object_id(instructor_id, "instructor ID")
         if search.strip():
             query["name"] = {"$regex": re.escape(search.strip()[:100]), "$options": "i"}
         cursor = (
@@ -248,6 +253,25 @@ class DataBase:
             maxTimeMS=5000,
         ))
         return students[:page_size], len(students) > page_size
+
+    def authorize_class_enrollment(self, class_id, actor_id):
+        """Allow admins or the class's current professor to manage enrollment."""
+        actor_id = self._object_id(actor_id, "user ID")
+        class_id = self._object_id(class_id, "class ID")
+        actor = self.read_one("users", {"_id": actor_id})
+        classroom = self.read_one("classes", {"_id": class_id})
+        if not classroom:
+            raise ValueError("That class no longer exists.")
+        role = (actor or {}).get("permissions")
+        if role == "admin" or (
+            role == "professor" and classroom.get("instructor_id") == actor_id
+        ):
+            return classroom
+        raise ValueError("You can only add students to classes you teach.")
+
+    def enroll_student_as(self, class_id, user_id, actor_id):
+        self.authorize_class_enrollment(class_id, actor_id)
+        return self.enroll_student(class_id, user_id)
 
     def enroll_student(self, class_id, user_id):
         class_id = self._object_id(class_id, "class ID")

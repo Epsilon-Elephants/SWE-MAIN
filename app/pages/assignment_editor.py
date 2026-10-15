@@ -36,10 +36,11 @@ def show_assignment_editor(assignment_id, professor_id: str):
             "Description", value=assignment.get("description", "")
         )
         current_status = assignment.get("status", "draft")
+        statuses = ["draft", "published", "closed"]
         status = st.selectbox(
             "Status",
-            ["draft", "published"],
-            index=1 if current_status == "published" else 0,
+            statuses,
+            index=statuses.index(current_status) if current_status in statuses else 0,
         )
         save_assignment = st.form_submit_button("Save assignment")
 

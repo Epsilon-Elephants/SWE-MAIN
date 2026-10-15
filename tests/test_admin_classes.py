@@ -13,6 +13,84 @@ from streamlit.testing.v1 import AppTest
 
 
 class TestAdminClasses(unittest.TestCase):
+    def test_professor_classes_query_is_scoped_to_instructor(self):
+        professor_id = ObjectId()
+        collection = MagicMock()
+        cursor = collection.find.return_value
+        for method in ("collation", "sort", "skip", "limit", "max_time_ms"):
+            getattr(cursor, method).return_value = cursor
+        cursor.__iter__.return_value = iter([])
+        with patch.object(db, "_get_collection", return_value=collection):
+            db.list_classes_page(instructor_id=str(professor_id), active_only=True)
+        query = collection.find.call_args.args[0]
+        self.assertEqual(query["instructor_id"], professor_id)
+        self.assertEqual(query["active"], {"$ne": False})
+        self.assertIn("closed", query["status"]["$nin"])
+
+    def test_enrollment_requires_admin_or_current_class_professor(self):
+        class_id, professor_id, student_id = ObjectId(), ObjectId(), ObjectId()
+        classroom = {"_id": class_id, "instructor_id": professor_id}
+        for role, owner, allowed in (
+            ("professor", professor_id, True),
+            ("professor", ObjectId(), False),
+            ("student", professor_id, False),
+            ("admin", ObjectId(), True),
+        ):
+            with self.subTest(role=role, allowed=allowed), patch.object(
+                db, "read_one", side_effect=[
+                    {"permissions": role}, {**classroom, "instructor_id": owner},
+                ],
+            ), patch.object(db, "enroll_student") as enroll:
+                if allowed:
+                    db.enroll_student_as(class_id, student_id, professor_id)
+                    enroll.assert_called_once_with(class_id, student_id)
+                else:
+                    with self.assertRaises(ValueError):
+                        db.enroll_student_as(class_id, student_id, professor_id)
+                    enroll.assert_not_called()
+
+    def test_admin_can_directly_enroll_student(self):
+        class_id, student_id = ObjectId(), ObjectId()
+        student = {"_id": student_id, "email": "ada@example.com"}
+        test_app = AppTest.from_string(f'''
+import streamlit as st
+from pages.dashboards.admin.classes import load_classes_page
+st.session_state.user = {{"permissions": "admin"}}
+st.session_state.admin_selected_class = "{class_id}"
+load_classes_page()
+''')
+        with patch.object(db, "ensure_class_admin_indexes"), patch.object(
+            db, "read_one", return_value={"_id": class_id, "name": "Logic"},
+        ), patch.object(db, "list_students_for_class", return_value=([student], False)), patch.object(
+            db, "enroll_student",
+        ) as enroll:
+            test_app.run()
+            test_app.button(key="show_add_students").click().run()
+            test_app.button(key=f"class_add_{class_id}_{student_id}").click().run()
+            self.assertFalse(test_app.exception)
+            enroll.assert_called_once_with(str(class_id), str(student_id))
+            self.assertTrue(test_app.success)
+
+    def test_professor_can_enroll_from_own_class_dialog(self):
+        class_id, professor_id, student_id = ObjectId(), ObjectId(), ObjectId()
+        classroom = {"_id": class_id, "name": "Logic", "instructor_id": professor_id}
+        test_app = AppTest.from_string(f'''
+import streamlit as st
+from pages.dashboards.professor_classes import render_professor_classes
+st.session_state.user = {{"permissions": "professor", "id": "{professor_id}"}}
+render_professor_classes("{professor_id}")
+''')
+        with patch.object(db, "list_classes_page", return_value=([classroom], False)) as listing, patch.object(
+            db, "authorize_class_enrollment", return_value=classroom,
+        ), patch.object(db, "list_students_for_class", return_value=([{"_id": student_id, "email": "ada@example.com"}], False)), patch.object(db, "enroll_student_as") as enroll:
+            test_app.run()
+            listing.assert_called_with("", 0, 10, instructor_id=str(professor_id), active_only=True)
+            test_app.button(key=f"professor_class_{class_id}").click().run()
+            test_app.button(key=f"professor_add_{class_id}_{student_id}").click().run()
+            self.assertFalse(test_app.exception)
+            enroll.assert_called_once_with(str(class_id), student_id, str(professor_id))
+            self.assertTrue(test_app.success)
+
     def test_class_page_is_bounded_and_search_is_escaped(self):
         collection = MagicMock()
         cursor = collection.find.return_value

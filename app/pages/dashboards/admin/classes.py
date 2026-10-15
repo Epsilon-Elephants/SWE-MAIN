@@ -136,7 +136,7 @@ def _render_student_row(class_id, enrolled, student):
             st.error(str(error) if isinstance(error, ValueError) else "Could not update enrollment.")
         else:
             st.session_state.admin_class_dialog_success = message
-            st.rerun(scope="fragment")
+            st.rerun()
 
 
 def _render_student_list(class_id, enrolled, search):
@@ -182,14 +182,14 @@ def _render_student_list(class_id, enrolled, search):
         width="stretch",
     ):
         st.session_state[state_key] = page - 1
-        st.rerun(scope="fragment")
+        st.rerun()
     if next_page.button(
         "Next", disabled=not has_next,
         key=f"class_students_{'in' if enrolled else 'out'}_next",
         width="stretch",
     ):
         st.session_state[state_key] = page + 1
-        st.rerun(scope="fragment")
+        st.rerun()
 
 
 def _render_managed_student(class_id, student):
@@ -250,7 +250,7 @@ def _render_managed_student(class_id, student):
         else:
             _clear_managed_student()
             st.session_state.admin_class_dialog_success = "Student removed from the class."
-            st.rerun(scope="fragment")
+            st.rerun()
 
 
 def _render_student_dialog(class_id, enrolled):
@@ -285,6 +285,7 @@ def _show_roster_dialog(class_id):
     "Add students", width="large", on_dismiss=_dismiss_student_dialog,
 )
 def _show_add_students_dialog(class_id):
+    st.caption("Add any student directly to this class. Student approval is not required.")
     _render_student_dialog(class_id, enrolled=False)
 
 

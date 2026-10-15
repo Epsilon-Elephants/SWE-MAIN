@@ -4,6 +4,7 @@ from pymongo.errors import PyMongoError
 from db.assignments import create_assignment, list_assignments_for_professor
 from pages.assignment_editor import show_assignment_editor
 from pages.dashboards.dashboard import Dashboard
+from pages.dashboards.professor_classes import render_professor_classes
 
 
 @st.dialog("Create assignment")
@@ -20,6 +21,19 @@ def _show_create_assignment_dialog(professor_id):
             st.error(str(error))
         else:
             st.session_state.professor_assignment_success = "Assignment created."
+            st.rerun()
+
+
+def _render_assignment_card(assignment):
+    assignment_id = assignment["_id"]
+    with st.container(border=True):
+        st.markdown(f"**{assignment.get('title', 'Untitled')}**")
+        st.caption(assignment.get("status", "draft").capitalize())
+        if description := assignment.get("description"):
+            st.write(description)
+        if st.button("Open", key=f"open_{assignment_id}"):
+            st.session_state.selected_assignment_id = assignment_id
+            st.session_state.pop("professor_enrollment_class", None)
             st.rerun()
 
 
@@ -41,31 +55,40 @@ class professorDash(Dashboard):
             show_assignment_editor(assignment_id, professor_id)
             return
 
-        st.subheader("Assignments")
+        assignments_column, classes_column = st.columns([2, 1], gap="large")
+        with assignments_column:
+            st.subheader("Active assignments")
+            if message := st.session_state.pop("professor_assignment_success", None):
+                st.success(message)
+            if st.button("Create assignment", type="primary", icon=":material/add:"):
+                st.session_state.pop("professor_enrollment_class", None)
+                _show_create_assignment_dialog(professor_id)
 
-        if message := st.session_state.pop("professor_assignment_success", None):
-            st.success(message)
+            try:
+                assignments = list_assignments_for_professor(professor_id)
+            except (ValueError, RuntimeError, PyMongoError) as error:
+                st.error(f"Could not load assignments: {error}")
+            else:
+                active = [
+                    assignment for assignment in assignments
+                    if assignment.get("status", "draft")
+                    not in {"draft", "closed", "archived", "completed", "cancelled"}
+                ]
+                if not active:
+                    st.info("No active assignments yet.")
+                for assignment in active:
+                    _render_assignment_card(assignment)
 
-        if st.button("Create assignment", type="primary", icon=":material/add:"):
-            _show_create_assignment_dialog(professor_id)
+                drafts = [a for a in assignments if a.get("status", "draft") == "draft"]
+                if drafts:
+                    with st.expander(f"Draft assignments ({len(drafts)})"):
+                        for assignment in drafts:
+                            _render_assignment_card(assignment)
+                closed = [a for a in assignments if a not in active and a not in drafts]
+                if closed:
+                    with st.expander(f"Closed assignments ({len(closed)})"):
+                        for assignment in closed:
+                            _render_assignment_card(assignment)
 
-        try:
-            assignments = list_assignments_for_professor(professor_id)
-        except (ValueError, RuntimeError, PyMongoError) as error:
-            st.error(f"Could not load assignments: {error}")
-            return
-
-        if not assignments:
-            st.info("No assignments yet.")
-            return
-
-        for assignment in assignments:
-            assignment_id = assignment["_id"]
-            title_column, button_column = st.columns([4, 1])
-            title_column.write(
-                f"**{assignment.get('title', 'Untitled')}** "
-                f"({assignment.get('status', 'draft')})"
-            )
-            if button_column.button("Open", key=f"open_{assignment_id}"):
-                st.session_state.selected_assignment_id = assignment_id
-                st.rerun()
+        with classes_column:
+            render_professor_classes(professor_id)
