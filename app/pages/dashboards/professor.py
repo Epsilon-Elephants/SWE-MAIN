@@ -6,6 +6,23 @@ from pages.assignment_editor import show_assignment_editor
 from pages.dashboards.dashboard import Dashboard
 
 
+@st.dialog("Create assignment")
+def _show_create_assignment_dialog(professor_id):
+    with st.form("create_assignment_form", clear_on_submit=True):
+        title = st.text_input("Assignment title")
+        description = st.text_area("Description")
+        submitted = st.form_submit_button("Create assignment")
+
+    if submitted:
+        try:
+            create_assignment(title, professor_id, description)
+        except (ValueError, RuntimeError, PyMongoError) as error:
+            st.error(str(error))
+        else:
+            st.session_state.professor_assignment_success = "Assignment created."
+            st.rerun()
+
+
 class professorDash(Dashboard):
     def __init__(self):
         super().__init__()
@@ -26,17 +43,11 @@ class professorDash(Dashboard):
 
         st.subheader("Assignments")
 
-        with st.form("create_assignment_form", clear_on_submit=True):
-            title = st.text_input("Assignment title")
-            description = st.text_area("Description")
-            submitted = st.form_submit_button("Create assignment")
+        if message := st.session_state.pop("professor_assignment_success", None):
+            st.success(message)
 
-        if submitted:
-            try:
-                create_assignment(title, professor_id, description)
-                st.success("Assignment created.")
-            except (ValueError, RuntimeError, PyMongoError) as error:
-                st.error(str(error))
+        if st.button("Create assignment", type="primary", icon=":material/add:"):
+            _show_create_assignment_dialog(professor_id)
 
         try:
             assignments = list_assignments_for_professor(professor_id)
