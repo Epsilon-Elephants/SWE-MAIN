@@ -1,6 +1,7 @@
 import streamlit as st
 from pymongo.errors import PyMongoError
 
+from db.DataBase import db
 from db.assignments import create_assignment, list_assignments_for_professor
 from pages.assignment_editor import show_assignment_editor
 from pages.dashboards.dashboard import Dashboard
@@ -9,14 +10,28 @@ from pages.dashboards.professor_classes import render_professor_classes
 
 @st.dialog("Create assignment")
 def _show_create_assignment_dialog(professor_id):
+    try:
+        classes = list(db.find("classes", {
+            "instructor_id": db._object_id(professor_id, "professor ID"),
+            "status": {"$nin": ["closed", "archived", "completed", "inactive", "cancelled"]},
+            "active": {"$ne": False},
+        }))
+    except (ValueError, RuntimeError, PyMongoError):
+        st.error("Could not load your classes. Try again.")
+        return
+    if not classes:
+        st.info("You need an active class before creating an assignment.")
+        return
+    class_names = {str(classroom["_id"]): classroom["name"] for classroom in classes}
     with st.form("create_assignment_form", clear_on_submit=True):
+        class_id = st.selectbox("Class", options=list(class_names), format_func=class_names.get)
         title = st.text_input("Assignment title")
         description = st.text_area("Description")
         submitted = st.form_submit_button("Create assignment")
 
     if submitted:
         try:
-            create_assignment(title, professor_id, description)
+            create_assignment(title, professor_id, description, class_id=class_id)
         except (ValueError, RuntimeError, PyMongoError) as error:
             st.error(str(error))
         else:

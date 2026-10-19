@@ -1,18 +1,25 @@
 import streamlit as st
 
+st.set_page_config(layout="wide")
+
 from pages.login import login_page
 from pages.welcome import welcomePage
 
-if "user" not in st.session_state:
-    st.session_state.user = None
+st.session_state.setdefault("user", None)
 
-if st.session_state.user is None:
-    login_page()
-else:
-    if st.session_state.user.get("permissions") != "admin":
-        with st.sidebar:
-            st.write(f"Signed in as {st.session_state.user['email']}")
-            if st.button("Log out"):
+
+def render_app():
+    if st.session_state.user is None:
+        login_page()
+    else:
+        if st.session_state.user.get("permissions") != "admin":
+            account, logout = st.columns([5, 1], vertical_alignment="center")
+            account.caption(f"Signed in as {st.session_state.user['email']}")
+            if logout.button("Log out"):
                 st.session_state.user = None
                 st.rerun()
-    welcomePage()
+        welcomePage()
+
+
+# Explicit navigation disables automatic discovery of the pages/ directory.
+st.navigation([st.Page(render_app, title="Home", default=True)], position="hidden").run()

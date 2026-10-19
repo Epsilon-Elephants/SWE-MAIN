@@ -10,17 +10,26 @@ def create_assignment(
     title: str,
     professor_id: str,
     description: str = "",
+    *,
+    class_id,
 ):
     title = title.strip()
     if not title:
         raise ValueError("Assignment title is required.")
     if not professor_id:
         raise ValueError("Professor ID is required.")
+    if not class_id:
+        raise ValueError("Class ID is required.")
+    class_id = db._object_id(class_id, "class ID")
+    instructor_id = db._object_id(professor_id, "professor ID")
+    if db.read_one("classes", {"_id": class_id, "instructor_id": instructor_id}) is None:
+        raise ValueError("Select a class that you teach.")
 
     assignment = {
         "title": title,
         "description": description.strip(),
         "professor_id": professor_id,
+        "class_id": class_id,
         "problems": [],
         "status": "draft",
     }
@@ -42,6 +51,14 @@ def list_assignments_for_professor(professor_id: str):
         raise ValueError("Professor ID is required.")
 
     return list(db.find("assignments", {"professor_id": professor_id}))
+
+
+def list_assignments_for_class(class_id):
+    """Return homework linked to a class, accepting an ObjectId or its string form."""
+    if not class_id:
+        raise ValueError("Class ID is required.")
+    class_id = db._object_id(class_id, "class ID")
+    return list(db.find("assignments", {"class_id": class_id}))
 
 
 # Update an assignment that belongs to a professor
