@@ -10,6 +10,8 @@ import base64
 import logging
 import requests
 import streamlit.components.v1 as components
+import streamlit as st
+from ddgs import DDGS
 
 # placeholder until real data is added
 recently_visited = [
@@ -148,15 +150,42 @@ class studentDash(Dashboard):
     def render_search(self):
         _, middle, _ = st.columns([1,2,1])
         with middle:
-            st.text_input(
+            # convert input into a query
+            query = st.text_input(
                 "Search for resources",
-                placeholder= "Search for resources",
+                placeholder="Search for resources",
                 label_visibility="collapsed",
                 key="student_search_query",
             )
+            
             pill_cols = st.columns(len(option))
             for col, label in zip(pill_cols, option):
                 col.button(label, key=f"student_filter_{label}", width="stretch")
+            
+            # if anything is typed search for it
+            if query:
+                with st.spinner("Searching..."):
+                    try:
+                        # get top 5 results
+                        results = DDGS().text(query, max_results=5)
+                        
+                        if results:
+                            for r in results:
+                                # clickable title
+                                st.markdown(f"**[{r['title']}]({r['href']})**")
+                                
+                                # Limit the description to 200 characters so it doesn't flood the whole page
+                                description = r['body']
+                                if len(description) > 200:
+                                    description = description[:200] + "..."
+                                
+                                # show description and divider between results
+                                st.caption(description)
+                                st.divider()
+                        else:
+                            st.info("No results found.")
+                    except Exception as e:
+                        st.error("Search is temporarily unavailable.")
 
 # the "Recently visited" sesction with placeholder cards that scroll sideways
     def render_recently_visited(self):
