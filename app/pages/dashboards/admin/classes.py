@@ -4,6 +4,7 @@ import streamlit as st
 from pymongo.errors import PyMongoError
 
 from db.DataBase import db
+from pages.dashboards.admin.assignments import render_class_assignments
 from pages.dashboards.admin.components import render_admin_header
 from pages.dashboards.admin.styles import (
     table_header_key,
@@ -313,6 +314,9 @@ def _render_selected_class(class_id):
     elif dialog == ADD_STUDENTS_DIALOG:
         _show_add_students_dialog(class_id)
 
+    st.divider()
+    render_class_assignments(class_id)
+
 
 def _render_create_class():
     _, content, _ = st.columns([1, 2, 1])
@@ -429,7 +433,7 @@ def load_classes_page():
         if selected:
             render_admin_header(
                 selected["name"],
-                "Manage the roster and student grades.",
+                "Manage assignments, the roster, and student grades.",
                 back_label="Classes",
                 back_callback=_clear_selected_class,
                 back_key="back_to_classes",

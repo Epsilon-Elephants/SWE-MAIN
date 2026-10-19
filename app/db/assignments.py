@@ -195,3 +195,37 @@ def delete_problem(assignment_id, professor_id: str, problem_id: str):
 
     result = db.update_one("assignments", query, {"problems": problems})
     return result.matched_count > 0
+
+
+def _admin_assignment_query(assignment_id, class_id, actor_id):
+    """Authorize admin actions and scope every mutation to the selected class."""
+    if not actor_id:
+        raise ValueError("Administrator ID is required.")
+    actor_id = db._object_id(actor_id, "user ID")
+    actor = db.read_one("users", {"_id": actor_id})
+    if (actor or {}).get("permissions") != "admin":
+        raise ValueError("You must be an admin to manage class assignments.")
+    if not assignment_id or not class_id:
+        raise ValueError("Assignment ID and class ID are required.")
+    return {
+        "_id": db._object_id(assignment_id, "assignment ID"),
+        "class_id": db._object_id(class_id, "class ID"),
+    }
+
+
+def update_class_assignment(assignment_id, class_id, actor_id, title, description, status):
+    query = _admin_assignment_query(assignment_id, class_id, actor_id)
+    title = title.strip()
+    if not title:
+        raise ValueError("Assignment title is required.")
+    if status not in ("draft", "published", "closed"):
+        raise ValueError("Assignment status must be draft, published, or closed.")
+    result = db.update_one("assignments", query, {
+        "title": title, "description": description.strip(), "status": status,
+    })
+    return result.matched_count > 0
+
+
+def delete_class_assignment(assignment_id, class_id, actor_id):
+    query = _admin_assignment_query(assignment_id, class_id, actor_id)
+    return db.delete_one("assignments", query).deleted_count > 0

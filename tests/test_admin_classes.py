@@ -13,6 +13,15 @@ from streamlit.testing.v1 import AppTest
 
 
 class TestAdminClasses(unittest.TestCase):
+    def setUp(self):
+        # Class-manager tests isolate the assignments panel's database reads.
+        assignments = patch(
+            "pages.dashboards.admin.assignments.list_assignments_for_class",
+            return_value=[],
+        )
+        assignments.start()
+        self.addCleanup(assignments.stop)
+
     def test_professor_classes_query_is_scoped_to_instructor(self):
         professor_id = ObjectId()
         collection = MagicMock()
