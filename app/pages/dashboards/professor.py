@@ -1,15 +1,90 @@
+import logging
+from datetime import date, datetime, time, timedelta, timezone
+
 import streamlit as st
 from pymongo.errors import PyMongoError
 
 from components.problem_editor import problem_editor
 from db.DataBase import db
 from db.assignments import create_assignment, list_assignments_for_professor
+from db.completed_assignments import summarize_completions
 from pages.assignment_editor import show_assignment_editor
 from pages.dashboards.dashboard import Dashboard
 from pages.dashboards.professor_classes import render_professor_classes
 from pages.dashboards.admin.components import render_admin_header
 from pages.dashboards.admin.admin import _load_admin_css
 from pages.settings import SETTINGS_PAGE, load_settings_page
+
+logger = logging.getLogger(__name__)
+
+CLOSED_STATUSES = {"closed", "archived", "completed", "cancelled"}
+
+# Assignment states shown on the dashboard. "open", "past_due" and "scheduled" are all
+# published assignments; they differ only by where today falls relative to their dates.
+STATE_LABELS = {
+    "open": "Open",
+    "past_due": "Past due",
+    "scheduled": "Scheduled",
+    "draft": "Draft",
+    "closed": "Closed",
+}
+
+
+def _as_utc(value):
+    """Normalize Mongo dates (naive UTC datetimes), aware datetimes, and dates to aware UTC."""
+    if isinstance(value, datetime):
+        return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value.astimezone(timezone.utc)
+    if isinstance(value, date):
+        return datetime.combine(value, time.min, tzinfo=timezone.utc)
+    return None
+
+
+def _format_date(value):
+    value = _as_utc(value)
+    return value.strftime("%b %d, %Y") if value else "No date"
+
+
+def _due_end(assignment):
+    """Due dates are stored as midnight UTC, so students have the whole due day."""
+    due = _as_utc(assignment.get("due_date"))
+    return due + timedelta(days=1) if due else None
+
+
+def assignment_state(assignment, now=None):
+    now = now or datetime.now(timezone.utc)
+    status = assignment.get("status", "draft")
+    if status == "draft":
+        return "draft"
+    if status in CLOSED_STATUSES:
+        return "closed"
+    posted = _as_utc(assignment.get("posted"))
+    if posted and posted > now:
+        return "scheduled"
+    due_end = _due_end(assignment)
+    if due_end and due_end <= now:
+        return "past_due"
+    return "open"
+
+
+def _due_sort_key(assignment):
+    due = _as_utc(assignment.get("due_date"))
+    return (due is None, due or datetime.max.replace(tzinfo=timezone.utc), assignment.get("title", ""))
+
+
+def _load_assignment_context(professor_id, assignments):
+    """Return ({class_id: name}, {assignment_id: completion summary}) for the cards.
+
+    These are nice-to-have details, so a failure shows a note instead of hiding the dashboard.
+    """
+    try:
+        classes = db.find("classes", {"instructor_id": db._object_id(professor_id, "professor ID")})
+        class_names = {classroom["_id"]: classroom.get("name", "Untitled class") for classroom in classes}
+        completions = summarize_completions([assignment["_id"] for assignment in assignments])
+    except (ValueError, RuntimeError, PyMongoError):
+        logger.exception("Failed to load professor dashboard details")
+        st.caption("Class names and submission counts are unavailable right now.")
+        return {}, {}
+    return class_names, completions
 
 
 @st.dialog("Create assignment")
@@ -58,17 +133,55 @@ def _show_create_assignment_dialog(professor_id):
             st.rerun()
 
 
-def _render_assignment_card(assignment):
+def _open_assignment(assignment_id):
+    st.session_state.selected_assignment_id = assignment_id
+    st.session_state.pop("professor_enrollment_class", None)
+    st.session_state.pop("professor_roster_class", None)
+
+
+def _render_assignment_card(assignment, state, class_name=None, summary=None):
     assignment_id = assignment["_id"]
     with st.container(border=True, key=f"assignment_card_{assignment_id}"):
         st.markdown(f"**{assignment.get('title', 'Untitled')}**")
-        st.caption(assignment.get("status", "draft").capitalize())
+        details = [STATE_LABELS[state]]
+        if class_name:
+            details.append(class_name)
+        if state == "scheduled":
+            details.append(f"Posts {_format_date(assignment.get('posted'))}")
+        if assignment.get("due_date"):
+            details.append(f"Due {_format_date(assignment.get('due_date'))}")
+        problem_count = len(assignment.get("problems", []))
+        details.append(f"{problem_count} problem{'s' if problem_count != 1 else ''}")
+        st.caption(" · ".join(details))
         if description := assignment.get("description"):
             st.write(description)
-        if st.button("Open", key=f"open_{assignment_id}"):
-            st.session_state.selected_assignment_id = assignment_id
-            st.session_state.pop("professor_enrollment_class", None)
-            st.rerun()
+        if state != "draft":
+            summary = summary or {"students": 0, "attempts": 0}
+            st.caption(
+                f"{summary['students']} student{'s' if summary['students'] != 1 else ''} submitted"
+                f" · {summary['attempts']} attempt{'s' if summary['attempts'] != 1 else ''}"
+            )
+        st.button(
+            "Open", key=f"open_{assignment_id}",
+            on_click=_open_assignment, args=(assignment_id,),
+        )
+
+
+def _render_overview(states, completions):
+    now = datetime.now(timezone.utc)
+    week_from_now = now + timedelta(days=7)
+    open_count = sum(state in {"open", "past_due"} for _, state in states)
+    due_soon = sum(
+        state == "open" and (due_end := _due_end(assignment)) is not None and due_end <= week_from_now
+        for assignment, state in states
+    )
+    past_due = sum(state == "past_due" for _, state in states)
+    attempts = sum(summary.get("attempts", 0) for summary in completions.values())
+    columns = st.columns(4)
+    columns[0].metric("Open assignments", open_count)
+    columns[1].metric("Due in 7 days", due_soon)
+    columns[2].metric("Past due", past_due)
+    columns[3].metric("Total submissions", attempts)
 
 
 class professorDash(Dashboard):
@@ -86,7 +199,6 @@ class professorDash(Dashboard):
             f"Welcome back, {st.session_state.user.get('first_name') or 'Professor'}",
         )
 
-        # temporary interface for creating assignments and navigation to assignment editor
         professor_id = st.session_state.user.get("id")
         if not professor_id:
             st.error("Your professor account is missing an ID.")
@@ -97,6 +209,17 @@ class professorDash(Dashboard):
             show_assignment_editor(assignment_id, professor_id)
             return
 
+        try:
+            assignments = list_assignments_for_professor(professor_id)
+        except (ValueError, RuntimeError, PyMongoError) as error:
+            assignments = None
+            load_error = error
+        else:
+            load_error = None
+            states = [(assignment, assignment_state(assignment)) for assignment in assignments]
+            class_names, completions = _load_assignment_context(professor_id, assignments)
+            _render_overview(states, completions)
+
         assignments_column, classes_column = st.columns([2, 1], gap="large")
         with assignments_column:
             st.subheader("Active assignments")
@@ -104,33 +227,38 @@ class professorDash(Dashboard):
                 st.success(message)
             if st.button("Create assignment", type="primary", icon=":material/add:"):
                 st.session_state.pop("professor_enrollment_class", None)
+                st.session_state.pop("professor_roster_class", None)
                 _show_create_assignment_dialog(professor_id)
 
-            try:
-                assignments = list_assignments_for_professor(professor_id)
-            except (ValueError, RuntimeError, PyMongoError) as error:
-                st.error(f"Could not load assignments: {error}")
+            if load_error is not None:
+                st.error(f"Could not load assignments: {load_error}")
             else:
-                active = [
-                    assignment for assignment in assignments
-                    if assignment.get("status", "draft")
-                    not in {"draft", "closed", "archived", "completed", "cancelled"}
-                ]
+                def render(assignment, state):
+                    _render_assignment_card(
+                        assignment, state,
+                        class_names.get(assignment.get("class_id")),
+                        completions.get(assignment["_id"]),
+                    )
+
+                active = sorted(
+                    [pair for pair in states if pair[1] in {"open", "past_due", "scheduled"}],
+                    key=lambda pair: _due_sort_key(pair[0]),
+                )
                 if not active:
                     st.info("No active assignments yet.")
-                for assignment in active:
-                    _render_assignment_card(assignment)
+                for assignment, state in active:
+                    render(assignment, state)
 
-                drafts = [a for a in assignments if a.get("status", "draft") == "draft"]
+                drafts = [pair for pair in states if pair[1] == "draft"]
                 if drafts:
                     with st.expander(f"Draft assignments ({len(drafts)})"):
-                        for assignment in drafts:
-                            _render_assignment_card(assignment)
-                closed = [a for a in assignments if a not in active and a not in drafts]
+                        for assignment, state in drafts:
+                            render(assignment, state)
+                closed = [pair for pair in states if pair[1] == "closed"]
                 if closed:
                     with st.expander(f"Closed assignments ({len(closed)})"):
-                        for assignment in closed:
-                            _render_assignment_card(assignment)
+                        for assignment, state in closed:
+                            render(assignment, state)
 
         with classes_column:
             render_professor_classes(professor_id)
