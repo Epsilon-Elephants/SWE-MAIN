@@ -4,12 +4,36 @@ from datetime import date
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
 from bson import ObjectId
 from streamlit.testing.v1 import AppTest
 
 sys.path.append(str(Path(__file__).resolve().parents[1] / "app"))
 
 from db.DataBase import db
+
+
+@pytest.mark.parametrize("title,problem,message", [
+    ("  ", "Solve this", "Assignment title is required."),
+    ("Homework", "  ", "At least one problem is required."),
+])
+def test_create_form_rejects_blank_required_content(title, problem, message):
+    app = AppTest.from_string(f'''
+from pages.dashboards.professor import _show_create_assignment_dialog
+_show_create_assignment_dialog("{ObjectId()}")
+''')
+    with patch.object(db, "find", return_value=[{"_id": ObjectId(), "name": "Logic"}]), patch(
+        "pages.dashboards.professor.create_assignment",
+    ) as create:
+        app.run()
+        app.text_input[0].set_value(title)
+        app.text_area(key="create_assignment_first_problem").set_value(problem)
+        app.button[0].click().run()
+        assert not app.exception
+        create.assert_not_called()
+        assert app.error[0].value == message
+        assert app.text_input[0].value == title
+        assert app.text_area(key="create_assignment_first_problem").value == problem
 
 
 class TestProfessorDashboard(unittest.TestCase):
@@ -22,12 +46,14 @@ show_assignment_editor("{assignment_id}", "{professor_id}")
         assignment = {
             "professor_id": professor_id, "title": "Homework", "status": "draft",
             "posted": date(2026, 11, 1), "due_date": date(2026, 11, 8),
+            "problems": [{"problem_id": "first", "content": "Solve this"}],
         }
         with patch("pages.assignment_editor.get_assignment", return_value=assignment), patch(
             "pages.assignment_editor.update_assignment", return_value=True,
         ) as update:
             app.run()
             self.assertFalse(app.exception)
+            self.assertTrue(next(button for button in app.button if button.label == "Remove problem").disabled)
             self.assertFalse(any(widget.label == "Status" for widget in app.selectbox))
             app.date_input[1].set_value(date(2026, 11, 10))
             next(button for button in app.button if button.label == "Save assignment").click().run()
@@ -49,6 +75,7 @@ _show_create_assignment_dialog("{professor_id}")
             app.run()
             self.assertFalse(app.exception)
             app.text_input[0].set_value("Homework")
+            app.text_area(key="create_assignment_first_problem").set_value("Solve this")
             app.date_input[0].set_value(date(2026, 11, 1))
             app.date_input[1].set_value(date(2026, 11, 8))
             app.button[0].click().run()
@@ -56,6 +83,7 @@ _show_create_assignment_dialog("{professor_id}")
             create.assert_called_once_with(
                 "Homework", professor_id, "", class_id=str(class_id),
                 posted=date(2026, 11, 1), due_date=date(2026, 11, 8), status="published",
+                problems=["Solve this"],
             )
 
     def test_creation_rejects_invalid_date_order_and_preserves_input(self):

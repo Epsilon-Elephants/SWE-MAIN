@@ -47,10 +47,14 @@ def show_assignment_editor(assignment_id, professor_id: str):
 
     if save_assignment:
         try:
+            if not title.strip():
+                raise ValueError("Assignment title is required.")
             if posted is None or due_date is None:
                 raise ValueError("Posted date and due date are required.")
             if due_date < posted:
                 raise ValueError("Due date cannot be before the posted date.")
+            if not assignment.get("problems"):
+                raise ValueError("At least one problem is required. Add a problem before saving.")
             update_assignment(
                 assignment_id,
                 professor_id,
@@ -88,7 +92,9 @@ def show_assignment_editor(assignment_id, professor_id: str):
                 initial_content=problem.get("content", ""),
             )
             save_problem = st.form_submit_button("Save problem")
-            remove_problem = st.form_submit_button("Remove problem")
+            remove_problem = st.form_submit_button(
+                "Remove problem", disabled=len(assignment.get("problems", [])) <= 1,
+            )
 
         try:
             if save_problem:

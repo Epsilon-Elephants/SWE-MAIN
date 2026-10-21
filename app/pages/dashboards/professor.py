@@ -1,6 +1,7 @@
 import streamlit as st
 from pymongo.errors import PyMongoError
 
+from components.problem_editor import problem_editor
 from db.DataBase import db
 from db.assignments import create_assignment, list_assignments_for_professor
 from pages.assignment_editor import show_assignment_editor
@@ -32,17 +33,23 @@ def _show_create_assignment_dialog(professor_id):
         description = st.text_area("Description")
         posted = st.date_input("Posted date", help="Students can see this assignment starting on this date (UTC).")
         due_date = st.date_input("Due date", help="Students can still complete the assignment after this date.")
+        first_problem = problem_editor("First problem (required)", key="create_assignment_first_problem")
         submitted = st.form_submit_button("Create assignment")
 
     if submitted:
         try:
+            if not title.strip():
+                raise ValueError("Assignment title is required.")
             if posted is None or due_date is None:
                 raise ValueError("Posted date and due date are required.")
             if due_date < posted:
                 raise ValueError("Due date cannot be before the posted date.")
+            if not first_problem.strip():
+                raise ValueError("At least one problem is required.")
             create_assignment(
                 title, professor_id, description, class_id=class_id,
                 posted=posted, due_date=due_date, status="published",
+                problems=[first_problem],
             )
         except (ValueError, RuntimeError, PyMongoError) as error:
             st.error(str(error))

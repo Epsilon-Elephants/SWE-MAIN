@@ -5,11 +5,14 @@ and `due_date` (the deadline). Both are BSON dates stored in UTC. Python `date`
 values mean midnight UTC; timezone-aware `datetime` values are converted to UTC
 and naive datetimes are interpreted as UTC.
 
-`create_assignment(..., class_id=..., posted=..., due_date=...)` defaults to
-posted now and no deadline. Dates can be changed with `update_assignment` or
+`create_assignment(..., class_id=..., posted=..., due_date=..., problems=[...])`
+requires a nonblank title, both dates, and at least one nonblank problem string.
+Problems are stored with generated IDs as part of the same insert.
+Dates can be changed with `update_assignment` or
 `update_class_assignment` using the same keyword arguments. Omitted update
-arguments preserve existing dates; `due_date=None` removes a deadline. A deadline
-before the posted date is rejected.
+arguments preserve existing dates. Missing or cleared dates, empty problem lists,
+and a deadline before the posted date are rejected when saving assignments.
+The last problem cannot be removed; delete the assignment instead if needed.
 
 `list_assignments_for_student(user_id)` returns published or closed assignments
 in the student's enrolled classes once their posted date has arrived. Deadlines
@@ -30,7 +33,8 @@ trusted grading code with a calculated score and the authenticated user's ID.
 Use `list_completed_assignments_for_user` or `list_completions_for_assignment`
 to retrieve history.
 
-The professor create/edit forms require both dates and save assignments as
+The professor create form includes a required first problem. The create/edit
+forms require a title, both dates, and at least one problem and save assignments as
 `published`: the posted date controls when students can first see them. The
 professor editor uses these dates instead of a manual status selector. The
 student dashboard currently has no submission/grading workflow; completion

@@ -37,6 +37,8 @@ def render_class_assignments(class_id):
             with st.form(f"{key}_edit"):
                 title = st.text_input("Title", value=assignment.get("title", ""))
                 description = st.text_area("Description", value=assignment.get("description", ""))
+                posted = st.date_input("Posted date", value=assignment.get("posted"))
+                due_date = st.date_input("Due date", value=assignment.get("due_date"))
                 statuses = ["draft", "published", "closed"]
                 current_status = assignment.get("status", "draft")
                 status = st.selectbox("Status", statuses, index=statuses.index(current_status) if current_status in statuses else 0)
@@ -58,6 +60,7 @@ def render_class_assignments(class_id):
                 else:
                     changed = update_class_assignment(
                         assignment_id, class_id, user.get("id"), title, description, status,
+                        posted=posted, due_date=due_date,
                     )
                     message = "Assignment updated."
             except (ValueError, RuntimeError, PyMongoError) as error:
