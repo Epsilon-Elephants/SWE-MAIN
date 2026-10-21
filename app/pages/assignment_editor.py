@@ -1,3 +1,5 @@
+import logging
+
 import streamlit as st
 from pymongo.errors import PyMongoError
 
@@ -7,9 +9,52 @@ from db.assignments import (
     delete_assignment,
     delete_problem,
     get_assignment,
+    set_assignment_status,
     update_assignment,
     update_problem,
 )
+from db.completed_assignments import list_submissions_for_assignment
+
+logger = logging.getLogger(__name__)
+
+
+def _student_name(user):
+    user = user or {}
+    name = " ".join(filter(None, [user.get("first_name"), user.get("last_name")]))
+    return name or "Unknown student"
+
+
+def _format_timestamp(value):
+    return value.strftime("%b %d, %Y %H:%M UTC") if hasattr(value, "strftime") else ""
+
+
+def _render_submissions(assignment_id):
+    st.markdown("**Submissions**")
+    try:
+        rows = list_submissions_for_assignment(assignment_id)
+    except (ValueError, RuntimeError, PyMongoError):
+        logger.exception("Failed to load submissions")
+        st.error("Could not load submissions. Try again.")
+        return
+    if not rows:
+        st.info("No submissions yet.")
+        return
+    st.caption(f"{len(rows)} student{'s' if len(rows) != 1 else ''} submitted.")
+    st.dataframe(
+        [
+            {
+                "Student": _student_name(row.get("user")),
+                "Email": (row.get("user") or {}).get("email", ""),
+                "Best score": row.get("best_score"),
+                "Latest score": row.get("latest_score"),
+                "Attempts": row.get("attempts", 0),
+                "Last submitted": _format_timestamp(row.get("last_completed")),
+            }
+            for row in rows
+        ],
+        hide_index=True,
+        width="stretch",
+    )
 
 
 def show_assignment_editor(assignment_id, professor_id: str):
@@ -28,7 +73,9 @@ def show_assignment_editor(assignment_id, professor_id: str):
         return
 
     assignment_key = str(assignment_id)
+    current_status = assignment.get("status", "draft")
     st.subheader("Assignment editor")
+    st.caption(f"Status: {current_status.capitalize()}")
 
     with st.form(f"assignment_{assignment_key}"):
         title = st.text_input("Title", value=assignment.get("title", ""))
@@ -60,13 +107,28 @@ def show_assignment_editor(assignment_id, professor_id: str):
                 professor_id,
                 title,
                 description,
-                "published",
+                # Saving publishes drafts but must not silently reopen a closed assignment.
+                "closed" if current_status == "closed" else "published",
                 posted=posted,
                 due_date=due_date,
             )
             st.rerun()
         except (ValueError, RuntimeError, PyMongoError) as error:
             st.error(str(error))
+
+    if current_status == "published":
+        status_label, new_status = "Close assignment", "closed"
+    elif current_status == "closed":
+        status_label, new_status = "Reopen assignment", "published"
+    else:
+        status_label = new_status = None
+    if status_label and st.button(status_label, key=f"status_{assignment_key}"):
+        try:
+            set_assignment_status(assignment_id, professor_id, new_status)
+        except (ValueError, RuntimeError, PyMongoError) as error:
+            st.error(str(error))
+        else:
+            st.rerun()
 
     confirm_delete = st.checkbox("Confirm assignment deletion")
     if st.button("Delete assignment", disabled=not confirm_delete):
@@ -124,3 +186,6 @@ def show_assignment_editor(assignment_id, professor_id: str):
             st.rerun()
         except (ValueError, RuntimeError, PyMongoError) as error:
             st.error(str(error))
+
+    st.divider()
+    _render_submissions(assignment_id)
