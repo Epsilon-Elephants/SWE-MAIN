@@ -1,0 +1,79 @@
+.block-container {
+    max-width: 1100px !important;
+    margin: 0 auto !important;
+    padding-top: 2rem !important;
+}
+
+div.stButton > button,
+div[data-testid="stFormSubmitButton"] > button {
+    border-radius: 999px;
+    width: 100%;
+}
+
+.st-key-admin_users_card,
+.st-key-admin_classes_card,
+.st-key-admin_create_card,
+.st-key-admin_browse_card {
+    min-height: 220px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 1rem;
+    text-align: center;
+    padding: 1.1rem;
+    border: 1px solid rgba(128, 128, 128, 0.4);
+    border-radius: 18px;
+    background: rgba(128, 128, 128, 0.15);
+}
+
+.st-key-settings_account_card,
+.st-key-settings_display_card,
+.st-key-settings_session_card {
+    padding: 1.1rem;
+    border: 1px solid rgba(128, 128, 128, 0.4);
+    border-radius: 18px;
+    background: rgba(128, 128, 128, 0.12);
+}
+
+.st-key-settings_account_card,
+.st-key-settings_display_card {
+    min-height: 300px;
+}
+
+.st-key-settings_session_card {
+    margin-top: 1rem;
+}
+
+.st-key-admin_users_card h3,
+.st-key-admin_classes_card h3,
+.st-key-admin_create_card h3,
+.st-key-admin_browse_card h3 {
+    margin-top: 0;
+    text-align: center;
+}
+
+.admin-page-subtitle {
+    margin: -0.7rem 0 1rem;
+    text-align: center;
+    color: rgba(128, 128, 128, 0.95);
+}
+
+/* Reserve equal caption space so paired card actions share a baseline. */
+:is(.st-key-admin_users_card, .st-key-admin_classes_card,
+    .st-key-admin_create_card, .st-key-admin_browse_card)
+    [data-testid="stCaptionContainer"] {
+    min-height: 3rem;
+    text-align: center;
+}
+
+:is(.st-key-admin_users_card, .st-key-admin_classes_card,
+    .st-key-admin_create_card, .st-key-admin_browse_card,
+    .st-key-settings_session_card) [data-testid="stMarkdownContainer"] {
+    text-align: center;
+}
+
+:is(.st-key-settings_account_card, .st-key-settings_display_card,
+    .st-key-settings_session_card) h3 {
+    text-align: center;
+    margin-top: 0;
+}

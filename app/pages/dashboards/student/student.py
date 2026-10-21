@@ -1,4 +1,5 @@
 import os
+from contextlib import closing
 
 import streamlit as st
 
@@ -8,6 +9,7 @@ from dotenv import load_dotenv
 from pathlib import Path
 import base64
 import logging
+import requests
 import streamlit.components.v1 as components
 
 # placeholder until real data is added
@@ -83,9 +85,9 @@ wheel_script = """
 
 # Creates one Rocky AI per login session
 def get_rocky():
-   if "rocky_client" not in st.session_state:
-    load_dotenv()
-    st.session_state.rocky_client = rocky()
+    if st.session_state.get("rocky_client") is None:
+        load_dotenv()
+        st.session_state.rocky_client = rocky()
     return st.session_state.rocky_client
 
 # dialogs for when Rocky is clicked
@@ -98,23 +100,38 @@ def rocky_dialog() -> None:
       key="student_rocky_question",
    )
 
+    answer_slot = st.empty()
     if st.button("->", key="student_rocky_ask", type="primary"):
         if not question.strip():
             st.warning("Ask a question first.")
         else:
             st.session_state.pop("student_rocky_answer", None)
-        try:
-            with st.spinner("Rocky is thinking..."):
-                bot = get_rocky()
-                bot.make_payload(question.strip())
-                st.session_state.student_rocky_answer = bot.send_payload()
-        except Exception:
-         logging.exception("Rocky request railed")
-         st.error("Rocky is unavailable right now. Please try again later.")
+            try:
+                with st.spinner("Rocky is thinking..."):
+                    bot = get_rocky()
+                    bot.make_payload(question.strip(), stream=True)
+                    with closing(bot.send_payload()) as response_stream:
+                        with answer_slot.container():
+                            st.session_state.student_rocky_answer = st.write_stream(response_stream)
+            except requests.exceptions.Timeout:
+                answer_slot.empty()
+                st.session_state.pop("rocky_client", None)
+                logging.exception("Rocky request timed out")
+                st.error("Rocky timed out. Please try again shortly.")
+            except requests.exceptions.ConnectionError:
+                answer_slot.empty()
+                st.session_state.pop("rocky_client", None)
+                logging.exception("Could not connect to Rocky")
+                st.error("Unable to connect to Rocky. Please try again later.")
+            except Exception:
+                answer_slot.empty()
+                st.session_state.pop("rocky_client", None)
+                logging.exception("Rocky request failed")
+                st.error("Rocky is unavailable right now. Please try again later.")
 
-         answer = st.session_state.get("student_rocky_answer")
-         if answer:
-            st.markdown(answer)
+    answer = st.session_state.get("student_rocky_answer")
+    if answer:
+        answer_slot.markdown(answer)
 
 
 # student dashboard
