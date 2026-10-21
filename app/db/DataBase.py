@@ -89,6 +89,11 @@ class DataBase:
         collection = self._get_collection(collection_name)
         return collection.find(query)
 
+    # AGGREGATE: run an aggregation pipeline and return the results as a list.
+    def aggregate(self, collection_name: str, pipeline: list[dict]):
+        collection = self._get_collection(collection_name)
+        return list(collection.aggregate(pipeline, maxTimeMS=5000))
+
     def ensure_user_directory_indexes(self):
         collection = self._get_collection("users")
         for field in ("first_name", "last_name", "email", "permissions", "created_at"):
@@ -290,6 +295,16 @@ class DataBase:
             }},
             upsert=True,
         )
+
+    def remove_student_from_class_as(self, class_id, user_id, actor_id):
+        """Remove a student after confirming the actor teaches the class (or is an admin)."""
+        self.authorize_class_enrollment(class_id, actor_id)
+        return self.remove_student_from_class(class_id, user_id)
+
+    def update_student_grade_as(self, class_id, user_id, earned, possible, actor_id):
+        """Update a grade after confirming the actor teaches the class (or is an admin)."""
+        self.authorize_class_enrollment(class_id, actor_id)
+        return self.update_student_grade(class_id, user_id, earned, possible)
 
     def remove_student_from_class(self, class_id, user_id):
         class_id = self._object_id(class_id, "class ID")
