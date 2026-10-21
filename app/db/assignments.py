@@ -1,8 +1,61 @@
 # Database functions for homework assignments
 
 from uuid import uuid4
+from datetime import date, datetime, time, timezone
 
 from db.DataBase import db
+
+
+_UNSET = object()
+
+
+def _utc_date(value, label):
+    """Store BSON dates in UTC; naive datetimes and calendar dates mean UTC."""
+    if isinstance(value, datetime):
+        return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value.astimezone(timezone.utc)
+    if isinstance(value, date):
+        return datetime.combine(value, time.min, tzinfo=timezone.utc)
+    raise ValueError(f"{label} must be a date or datetime.")
+
+
+def _schedule(posted, due_date):
+    posted = _utc_date(posted, "Posted date")
+    due_date = None if due_date is None else _utc_date(due_date, "Due date")
+    if due_date is not None and due_date < posted:
+        raise ValueError("Due date cannot be before the posted date.")
+    return {"posted": posted, "due_date": due_date}
+
+
+def _schedule_update(query, posted, due_date):
+    if posted is _UNSET and due_date is _UNSET:
+        return {}
+    existing = db.read_one("assignments", query) or {}
+    return _schedule(
+        (existing.get("posted") or datetime.now(timezone.utc)) if posted is _UNSET else posted,
+        existing.get("due_date") if due_date is _UNSET else due_date,
+    )
+
+
+def _student_visibility(now):
+    # Closed/old homework remains available. Missing posted dates are legacy homework.
+    return {
+        "status": {"$in": ["published", "closed"]},
+        "$or": [{"posted": {"$lte": now}}, {"posted": None}],
+    }
+
+
+def list_assignments_for_student(user_id):
+    """Return posted homework in enrolled classes, including past-due homework."""
+    if not user_id:
+        raise ValueError("User ID is required.")
+    user_id = db._object_id(user_id, "user ID")
+    class_ids = [row["class_id"] for row in db.find("students", {"user_id": user_id})]
+    if not class_ids:
+        return []
+    return list(db.find("assignments", {
+        "class_id": {"$in": class_ids},
+        **_student_visibility(datetime.now(timezone.utc)),
+    }))
 
 
 # Create an empty homework assignment and return its MongoDB ID
@@ -12,6 +65,9 @@ def create_assignment(
     description: str = "",
     *,
     class_id,
+    posted=None,
+    due_date=None,
+    status="draft",
 ):
     title = title.strip()
     if not title:
@@ -20,6 +76,8 @@ def create_assignment(
         raise ValueError("Professor ID is required.")
     if not class_id:
         raise ValueError("Class ID is required.")
+    if status not in ("draft", "published", "closed"):
+        raise ValueError("Assignment status must be draft, published, or closed.")
     class_id = db._object_id(class_id, "class ID")
     instructor_id = db._object_id(professor_id, "professor ID")
     if db.read_one("classes", {"_id": class_id, "instructor_id": instructor_id}) is None:
@@ -31,7 +89,8 @@ def create_assignment(
         "professor_id": professor_id,
         "class_id": class_id,
         "problems": [],
-        "status": "draft",
+        "status": status,
+        **_schedule(datetime.now(timezone.utc) if posted is None else posted, due_date),
     }
 
     return db.insert_one("assignments", assignment)
@@ -68,6 +127,9 @@ def update_assignment(
     title: str,
     description: str = "",
     status: str = "draft",
+    *,
+    posted=_UNSET,
+    due_date=_UNSET,
 ):
     if not assignment_id:
         raise ValueError("Assignment ID is required.")
@@ -83,6 +145,9 @@ def update_assignment(
         "title": title,
         "description": description.strip(),
         "status": status,
+        **_schedule_update(
+            {"_id": assignment_id, "professor_id": professor_id}, posted, due_date,
+        ),
     }
 
     result = db.update_one(
@@ -213,7 +278,10 @@ def _admin_assignment_query(assignment_id, class_id, actor_id):
     }
 
 
-def update_class_assignment(assignment_id, class_id, actor_id, title, description, status):
+def update_class_assignment(
+    assignment_id, class_id, actor_id, title, description, status,
+    *, posted=_UNSET, due_date=_UNSET,
+):
     query = _admin_assignment_query(assignment_id, class_id, actor_id)
     title = title.strip()
     if not title:
@@ -222,6 +290,7 @@ def update_class_assignment(assignment_id, class_id, actor_id, title, descriptio
         raise ValueError("Assignment status must be draft, published, or closed.")
     result = db.update_one("assignments", query, {
         "title": title, "description": description.strip(), "status": status,
+        **_schedule_update(query, posted, due_date),
     })
     return result.matched_count > 0
 

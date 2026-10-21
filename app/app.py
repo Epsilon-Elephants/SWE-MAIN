@@ -1,4 +1,5 @@
 import streamlit as st
+from pathlib import Path
 
 st.set_page_config(layout="wide")
 
@@ -9,10 +10,11 @@ st.session_state.setdefault("user", None)
 
 
 def render_app():
+    st.html(Path(__file__).with_name("styles").joinpath("app.css"))
     if st.session_state.user is None:
         login_page()
     else:
-        if st.session_state.user.get("permissions") != "admin":
+        if st.session_state.user.get("permissions") not in {"admin", "professor"}:
             account, logout = st.columns([5, 1], vertical_alignment="center")
             account.caption(f"Signed in as {st.session_state.user['email']}")
             if logout.button("Log out"):

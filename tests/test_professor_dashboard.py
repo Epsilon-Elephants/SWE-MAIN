@@ -1,5 +1,6 @@
 import sys
 import unittest
+from datetime import date
 from pathlib import Path
 from unittest.mock import patch
 
@@ -12,6 +13,69 @@ from db.DataBase import db
 
 
 class TestProfessorDashboard(unittest.TestCase):
+    def test_editor_replaces_status_with_schedule_and_saves_dates(self):
+        professor_id, assignment_id = str(ObjectId()), str(ObjectId())
+        app = AppTest.from_string(f'''
+from pages.assignment_editor import show_assignment_editor
+show_assignment_editor("{assignment_id}", "{professor_id}")
+''')
+        assignment = {
+            "professor_id": professor_id, "title": "Homework", "status": "draft",
+            "posted": date(2026, 11, 1), "due_date": date(2026, 11, 8),
+        }
+        with patch("pages.assignment_editor.get_assignment", return_value=assignment), patch(
+            "pages.assignment_editor.update_assignment", return_value=True,
+        ) as update:
+            app.run()
+            self.assertFalse(app.exception)
+            self.assertFalse(any(widget.label == "Status" for widget in app.selectbox))
+            app.date_input[1].set_value(date(2026, 11, 10))
+            next(button for button in app.button if button.label == "Save assignment").click().run()
+            self.assertFalse(app.exception)
+            update.assert_called_once_with(
+                assignment_id, professor_id, "Homework", "", "published",
+                posted=date(2026, 11, 1), due_date=date(2026, 11, 10),
+            )
+
+    def test_creation_schedules_assignment_using_selected_dates(self):
+        professor_id, class_id = str(ObjectId()), ObjectId()
+        app = AppTest.from_string(f'''
+from pages.dashboards.professor import _show_create_assignment_dialog
+_show_create_assignment_dialog("{professor_id}")
+''')
+        with patch.object(db, "find", return_value=[{"_id": class_id, "name": "Logic"}]), patch(
+            "pages.dashboards.professor.create_assignment",
+        ) as create:
+            app.run()
+            self.assertFalse(app.exception)
+            app.text_input[0].set_value("Homework")
+            app.date_input[0].set_value(date(2026, 11, 1))
+            app.date_input[1].set_value(date(2026, 11, 8))
+            app.button[0].click().run()
+            self.assertFalse(app.exception)
+            create.assert_called_once_with(
+                "Homework", professor_id, "", class_id=str(class_id),
+                posted=date(2026, 11, 1), due_date=date(2026, 11, 8), status="published",
+            )
+
+    def test_creation_rejects_invalid_date_order_and_preserves_input(self):
+        app = AppTest.from_string(f'''
+from pages.dashboards.professor import _show_create_assignment_dialog
+_show_create_assignment_dialog("{ObjectId()}")
+''')
+        with patch.object(db, "find", return_value=[{"_id": ObjectId(), "name": "Logic"}]), patch(
+            "pages.dashboards.professor.create_assignment",
+        ) as create:
+            app.run()
+            app.text_input[0].set_value("Homework")
+            app.date_input[0].set_value(date(2026, 11, 8))
+            app.date_input[1].set_value(date(2026, 11, 1))
+            app.button[0].click().run()
+            self.assertFalse(app.exception)
+            create.assert_not_called()
+            self.assertEqual(app.error[0].value, "Due date cannot be before the posted date.")
+            self.assertEqual(app.text_input[0].value, "Homework")
+
     def test_active_assignments_and_classes_have_separate_columns(self):
         professor_id = str(ObjectId())
         assignments = [
@@ -29,7 +93,7 @@ professorDash().load_dash()
         ):
             app.run()
         self.assertFalse(app.exception)
-        columns = app.get("column")
+        columns = [column for column in app.get("column") if column.subheader]
         self.assertEqual(columns[0].subheader[0].value, "Active assignments")
         self.assertEqual(columns[1].subheader[0].value, "Active classes")
         self.assertEqual([e.label for e in columns[0].expander], ["Draft assignments (1)", "Closed assignments (1)"])

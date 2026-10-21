@@ -17,7 +17,7 @@ def render_admin_header(
     st.session_state.setdefault("admin_default_page_size", 10)
 
     back_column, title_column, menu_column = st.columns(
-        [1.2, 5, 1.2], vertical_alignment="center",
+        [2, 5, 2], vertical_alignment="center",
     )
     if back_label and back_callback:
         back_column.button(
@@ -25,6 +25,7 @@ def render_admin_header(
             key=back_key,
             on_click=back_callback,
             type="tertiary",
+            width="stretch",
         )
 
     title_column.title(title, text_alignment="center")

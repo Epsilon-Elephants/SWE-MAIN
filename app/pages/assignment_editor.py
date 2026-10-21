@@ -13,7 +13,7 @@ from db.assignments import (
 
 
 def show_assignment_editor(assignment_id, professor_id: str):
-    if st.button("Back to assignments"):
+    if st.button("Back to assignments", key="back_to_assignments"):
         st.session_state.pop("selected_assignment_id", None)
         st.rerun()
 
@@ -35,23 +35,30 @@ def show_assignment_editor(assignment_id, professor_id: str):
         description = st.text_area(
             "Description", value=assignment.get("description", "")
         )
-        current_status = assignment.get("status", "draft")
-        statuses = ["draft", "published", "closed"]
-        status = st.selectbox(
-            "Status",
-            statuses,
-            index=statuses.index(current_status) if current_status in statuses else 0,
+        posted = st.date_input(
+            "Posted date", value=assignment.get("posted") or "today",
+            help="Students can see this assignment starting on this date (UTC).",
+        )
+        due_date = st.date_input(
+            "Due date", value=assignment.get("due_date"),
+            help="Students can still complete the assignment after this date.",
         )
         save_assignment = st.form_submit_button("Save assignment")
 
     if save_assignment:
         try:
+            if posted is None or due_date is None:
+                raise ValueError("Posted date and due date are required.")
+            if due_date < posted:
+                raise ValueError("Due date cannot be before the posted date.")
             update_assignment(
                 assignment_id,
                 professor_id,
                 title,
                 description,
-                status,
+                "published",
+                posted=posted,
+                due_date=due_date,
             )
             st.rerun()
         except (ValueError, RuntimeError, PyMongoError) as error:

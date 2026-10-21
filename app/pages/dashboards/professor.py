@@ -6,6 +6,9 @@ from db.assignments import create_assignment, list_assignments_for_professor
 from pages.assignment_editor import show_assignment_editor
 from pages.dashboards.dashboard import Dashboard
 from pages.dashboards.professor_classes import render_professor_classes
+from pages.dashboards.admin.components import render_admin_header
+from pages.dashboards.admin.admin import _load_admin_css
+from pages.settings import SETTINGS_PAGE, load_settings_page
 
 
 @st.dialog("Create assignment")
@@ -23,15 +26,24 @@ def _show_create_assignment_dialog(professor_id):
         st.info("You need an active class before creating an assignment.")
         return
     class_names = {str(classroom["_id"]): classroom["name"] for classroom in classes}
-    with st.form("create_assignment_form", clear_on_submit=True):
+    with st.form("create_assignment_form"):
         class_id = st.selectbox("Class", options=list(class_names), format_func=class_names.get)
         title = st.text_input("Assignment title")
         description = st.text_area("Description")
+        posted = st.date_input("Posted date", help="Students can see this assignment starting on this date (UTC).")
+        due_date = st.date_input("Due date", help="Students can still complete the assignment after this date.")
         submitted = st.form_submit_button("Create assignment")
 
     if submitted:
         try:
-            create_assignment(title, professor_id, description, class_id=class_id)
+            if posted is None or due_date is None:
+                raise ValueError("Posted date and due date are required.")
+            if due_date < posted:
+                raise ValueError("Due date cannot be before the posted date.")
+            create_assignment(
+                title, professor_id, description, class_id=class_id,
+                posted=posted, due_date=due_date, status="published",
+            )
         except (ValueError, RuntimeError, PyMongoError) as error:
             st.error(str(error))
         else:
@@ -41,7 +53,7 @@ def _show_create_assignment_dialog(professor_id):
 
 def _render_assignment_card(assignment):
     assignment_id = assignment["_id"]
-    with st.container(border=True):
+    with st.container(border=True, key=f"assignment_card_{assignment_id}"):
         st.markdown(f"**{assignment.get('title', 'Untitled')}**")
         st.caption(assignment.get("status", "draft").capitalize())
         if description := assignment.get("description"):
@@ -57,7 +69,15 @@ class professorDash(Dashboard):
         super().__init__()
 
     def load_dash(self):
-        super().load_dash()
+        st.html(_load_admin_css())
+        if st.session_state.get("professor_page") == SETTINGS_PAGE:
+            load_settings_page()
+            return
+
+        render_admin_header(
+            "Professor dashboard",
+            f"Welcome back, {st.session_state.user.get('first_name') or 'Professor'}",
+        )
 
         # temporary interface for creating assignments and navigation to assignment editor
         professor_id = st.session_state.user.get("id")
