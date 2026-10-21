@@ -19,21 +19,31 @@ def _utc_date(value, label):
 
 
 def _schedule(posted, due_date):
+    if posted is None:
+        raise ValueError("Posted date is required.")
+    if due_date is None:
+        raise ValueError("Due date is required.")
     posted = _utc_date(posted, "Posted date")
-    due_date = None if due_date is None else _utc_date(due_date, "Due date")
-    if due_date is not None and due_date < posted:
+    due_date = _utc_date(due_date, "Due date")
+    if due_date < posted:
         raise ValueError("Due date cannot be before the posted date.")
     return {"posted": posted, "due_date": due_date}
 
 
 def _schedule_update(query, posted, due_date):
-    if posted is _UNSET and due_date is _UNSET:
-        return {}
     existing = db.read_one("assignments", query) or {}
+    _require_problems(existing.get("problems"))
     return _schedule(
-        (existing.get("posted") or datetime.now(timezone.utc)) if posted is _UNSET else posted,
+        existing.get("posted") if posted is _UNSET else posted,
         existing.get("due_date") if due_date is _UNSET else due_date,
     )
+
+
+def _require_problems(problems):
+    if not problems:
+        raise ValueError("At least one problem is required.")
+    if any(not problem.get("content", "").strip() for problem in problems):
+        raise ValueError("Problem content is required.")
 
 
 def _student_visibility(now):
@@ -58,7 +68,7 @@ def list_assignments_for_student(user_id):
     }))
 
 
-# Create an empty homework assignment and return its MongoDB ID
+# Create a complete homework assignment and return its MongoDB ID
 def create_assignment(
     title: str,
     professor_id: str,
@@ -67,6 +77,7 @@ def create_assignment(
     class_id,
     posted=None,
     due_date=None,
+    problems=None,
     status="draft",
 ):
     title = title.strip()
@@ -83,14 +94,20 @@ def create_assignment(
     if db.read_one("classes", {"_id": class_id, "instructor_id": instructor_id}) is None:
         raise ValueError("Select a class that you teach.")
 
+    problem_documents = [
+        {"problem_id": str(uuid4()), "content": content.strip()}
+        for content in (problems or [])
+    ]
+    _require_problems(problem_documents)
+
     assignment = {
         "title": title,
         "description": description.strip(),
         "professor_id": professor_id,
         "class_id": class_id,
-        "problems": [],
+        "problems": problem_documents,
         "status": status,
-        **_schedule(datetime.now(timezone.utc) if posted is None else posted, due_date),
+        **_schedule(posted, due_date),
     }
 
     return db.insert_one("assignments", assignment)
@@ -257,6 +274,8 @@ def delete_problem(assignment_id, professor_id: str, problem_id: str):
     ]
     if len(problems) == len(current_problems):
         return False
+
+    _require_problems(problems)
 
     result = db.update_one("assignments", query, {"problems": problems})
     return result.matched_count > 0

@@ -18,7 +18,7 @@ class TestAssignmentDates(unittest.TestCase):
         posted = datetime(2026, 10, 19, 12, tzinfo=timezone(timedelta(hours=-4)))
         with patch.object(db, "read_one", return_value={}), patch.object(db, "insert_one") as insert:
             create_assignment("Homework", str(ObjectId()), class_id=ObjectId(),
-                              posted=posted, due_date=date(2026, 10, 20))
+                              posted=posted, due_date=date(2026, 10, 20), problems=["Solve this"])
         document = insert.call_args.args[1]
         self.assertEqual(document["posted"], datetime(2026, 10, 19, 16, tzinfo=timezone.utc))
         self.assertEqual(document["due_date"], datetime(2026, 10, 20, tzinfo=timezone.utc))
@@ -27,17 +27,21 @@ class TestAssignmentDates(unittest.TestCase):
         for posted, due in [(date(2026, 2, 2), date(2026, 2, 1)), ("tomorrow", None)]:
             with self.subTest(posted=posted), patch.object(db, "read_one", return_value={}), patch.object(db, "insert_one") as insert:
                 with self.assertRaises(ValueError):
-                    create_assignment("Homework", str(ObjectId()), class_id=ObjectId(), posted=posted, due_date=due)
+                    create_assignment("Homework", str(ObjectId()), class_id=ObjectId(), posted=posted, due_date=due, problems=["Solve this"])
                 insert.assert_not_called()
 
     def test_partial_updates_validate_against_existing_dates(self):
-        existing = {"posted": datetime(2026, 2, 2), "due_date": datetime(2026, 2, 10)}
+        existing = {"posted": datetime(2026, 2, 2), "due_date": datetime(2026, 2, 10),
+                    "problems": [{"content": "Solve this"}]}
         with patch.object(db, "read_one", return_value=existing), patch.object(db, "update_one", return_value=MagicMock(matched_count=1)) as update:
             with self.assertRaises(ValueError):
                 update_assignment(ObjectId(), "professor", "Homework", due_date=date(2026, 2, 1))
             update.assert_not_called()
-            update_assignment(ObjectId(), "professor", "Homework", due_date=None)
-            self.assertIsNone(update.call_args.args[2]["due_date"])
+            with self.assertRaisesRegex(ValueError, "Due date is required"):
+                update_assignment(ObjectId(), "professor", "Homework", due_date=None)
+            update.assert_not_called()
+            update_assignment(ObjectId(), "professor", "Homework", due_date=date(2026, 2, 11))
+            self.assertEqual(update.call_args.args[2]["due_date"], datetime(2026, 2, 11, tzinfo=timezone.utc))
             self.assertEqual(update.call_args.args[2]["posted"], existing["posted"].replace(tzinfo=timezone.utc))
 
     def test_student_listing_scopes_membership_and_posted_but_not_due_date(self):
