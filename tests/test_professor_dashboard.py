@@ -50,7 +50,7 @@ show_assignment_editor("{assignment_id}", "{professor_id}")
         }
         with patch("pages.assignment_editor.get_assignment", return_value=assignment), patch(
             "pages.assignment_editor.update_assignment", return_value=True,
-        ) as update:
+        ) as update, patch("pages.assignment_editor.list_submissions_for_assignment", return_value=[]):
             app.run()
             self.assertFalse(app.exception)
             self.assertTrue(next(button for button in app.button if button.label == "Remove problem").disabled)
@@ -118,7 +118,7 @@ professorDash().load_dash()
 ''')
         with patch("pages.dashboards.professor.list_assignments_for_professor", return_value=assignments), patch.object(
             db, "list_classes_page", return_value=([{"_id": ObjectId(), "name": "Calculus"}], False),
-        ):
+        ), patch("pages.dashboards.professor._load_assignment_context", return_value=({}, {})):
             app.run()
         self.assertFalse(app.exception)
         columns = [column for column in app.get("column") if column.subheader]
