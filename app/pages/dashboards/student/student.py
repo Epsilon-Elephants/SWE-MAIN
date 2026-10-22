@@ -177,7 +177,14 @@ class studentDash(Dashboard):
             )
             pill_cols = st.columns(len(option))
             for col, label in zip(pill_cols, option):
-                col.button(label, key=f"student_filter_{label}", width="stretch", on_click=open_view, args=(label.lower(),),)
+                if label == "Homework":
+                    if col.button(label, key=f"student_filter_{label}", width="stretch"):
+                        st.switch_page("pages/homework.py")
+                else:
+                    col.button(
+                        label, key=f"student_filter_{label}", width="stretch",
+                        on_click=open_view, args=(label.lower(),),
+                    )
 
 # the "Recently visited" sesction with placeholder cards that scroll sideways
     def render_recently_visited(self):
