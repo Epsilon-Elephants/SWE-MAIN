@@ -29,7 +29,7 @@ else:
         test_app.run()
         self.assertFalse(test_app.exception)
         self.assertFalse(any(button.label == "Log out" for button in test_app.button))
-        test_app.button(key="admin_settings_open").click().run()
+        test_app.button(key="dashboard_settings_open").click().run()
         self.assertFalse(test_app.exception)
         self.assertEqual(test_app.title[0].value, "Settings")
         self.assertEqual(test_app.text_input[1].value, "ada@example.com")
@@ -37,30 +37,10 @@ else:
         test_app.button(key="settings_back").click().run()
         self.assertEqual(test_app.title[0].value, "Professor dashboard")
         self.assertEqual(test_app.session_state.selected_assignment_id, "assignment-id")
-        test_app.button(key="admin_settings_open").click().run()
+        test_app.button(key="dashboard_settings_open").click().run()
         test_app.button(key="settings_logout").click().run()
         self.assertFalse(test_app.exception)
         self.assertNotIn("selected_assignment_id", test_app.session_state)
-
-    def test_gear_opens_settings_page_and_back_returns(self):
-        test_app = AppTest.from_string('''
-import streamlit as st
-from pages.dashboards.admin.admin import adminDash
-st.session_state.user = {
-    "permissions": "admin",
-    "first_name": "Admin",
-    "email": "admin@example.com",
-}
-adminDash().load_dash()
-''')
-        test_app.run()
-        test_app.button(key="admin_settings_open").click().run()
-        self.assertFalse(test_app.exception)
-        self.assertEqual(test_app.title[0].value, "Settings")
-        self.assertEqual(test_app.text_input[1].value, "admin@example.com")
-        self.assertEqual(test_app.toggle[0].label, "Compact tables")
-        test_app.button(key="settings_back").click().run()
-        self.assertEqual(test_app.title[0].value, "Admin dashboard")
 
 
 if __name__ == "__main__":

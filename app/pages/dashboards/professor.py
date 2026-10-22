@@ -7,8 +7,7 @@ from db.assignments import create_assignment, list_assignments_for_professor
 from pages.assignment_editor import show_assignment_editor
 from pages.dashboards.dashboard import Dashboard
 from pages.dashboards.professor_classes import render_professor_classes
-from pages.dashboards.admin.components import render_admin_header
-from pages.dashboards.admin.admin import _load_admin_css
+from components.dashboard_header import render_dashboard_header
 from pages.settings import SETTINGS_PAGE, load_settings_page
 
 
@@ -76,12 +75,11 @@ class professorDash(Dashboard):
         super().__init__()
 
     def load_dash(self):
-        st.html(_load_admin_css())
         if st.session_state.get("professor_page") == SETTINGS_PAGE:
             load_settings_page()
             return
 
-        render_admin_header(
+        render_dashboard_header(
             "Professor dashboard",
             f"Welcome back, {st.session_state.user.get('first_name') or 'Professor'}",
         )

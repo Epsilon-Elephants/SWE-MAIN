@@ -14,7 +14,7 @@ def render_app():
     if st.session_state.user is None:
         login_page()
     else:
-        if st.session_state.user.get("permissions") not in {"admin", "professor"}:
+        if st.session_state.user.get("permissions") != "professor":
             account, logout = st.columns([5, 1], vertical_alignment="center")
             account.caption(f"Signed in as {st.session_state.user['email']}")
             if logout.button("Log out"):
