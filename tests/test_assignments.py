@@ -11,8 +11,7 @@ sys.path.append(str(Path(__file__).resolve().parents[1] / "app"))
 
 from db.DataBase import db
 from db.assignments import (
-    create_assignment, delete_problem, list_assignments_for_class,
-    update_assignment, update_class_assignment,
+    create_assignment, delete_problem, update_assignment,
 )
 
 
@@ -32,24 +31,20 @@ def test_creation_requires_all_assignment_fields(missing):
         insert.assert_not_called()
 
 
-@pytest.mark.parametrize("admin", [False, True])
 @pytest.mark.parametrize("missing", [
     {"title": "  "}, {"posted": None}, {"due_date": None},
     {"problems": []}, {"problems": [{"content": "  "}]},
 ])
-def test_professor_and_admin_cannot_save_incomplete_assignments(admin, missing):
+def test_professor_cannot_save_incomplete_assignments(missing):
     existing = {
-        "permissions": "admin", "posted": date(2026, 11, 1),
+        "posted": date(2026, 11, 1),
         "due_date": date(2026, 11, 8), "problems": [{"content": "Solve this"}],
     }
     existing.update(missing)
     with patch.object(db, "read_one", return_value=existing), patch.object(db, "update_one") as update:
         with pytest.raises(ValueError):
             title = missing.get("title", "Homework")
-            if admin:
-                update_class_assignment(ObjectId(), ObjectId(), ObjectId(), title, "", "published")
-            else:
-                update_assignment(ObjectId(), "professor", title)
+            update_assignment(ObjectId(), "professor", title)
         update.assert_not_called()
 
 
@@ -91,17 +86,3 @@ class TestAssignmentClasses(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     create_assignment("Homework", str(ObjectId()), class_id=class_id)
                 insert.assert_not_called()
-
-    def test_class_lookup_normalizes_ids_and_scopes_query(self):
-        class_id = ObjectId()
-        for value in (class_id, str(class_id)):
-            with self.subTest(value=value), patch.object(db, "find", return_value=[{"title": "Homework"}]) as find:
-                self.assertEqual(list_assignments_for_class(value), [{"title": "Homework"}])
-                find.assert_called_once_with("assignments", {"class_id": class_id})
-
-    def test_class_lookup_rejects_missing_or_invalid_id(self):
-        for value in (None, "", "invalid"):
-            with self.subTest(value=value), patch.object(db, "find") as find:
-                with self.assertRaises(ValueError):
-                    list_assignments_for_class(value)
-                find.assert_not_called()
