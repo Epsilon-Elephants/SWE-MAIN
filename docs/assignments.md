@@ -1,5 +1,9 @@
 # Assignment dates and completions
 
+For a complete example of what the AI grading input will look like, see
+[Problem format and AI integration](ai-grading.md). For navigation and collection
+relationships, see [How the application works](architecture.md).
+
 Assignment documents have `posted` (the first date students can see homework)
 and `due_date` (the deadline). Both are BSON dates stored in UTC. Python `date`
 values mean midnight UTC; timezone-aware `datetime` values are converted to UTC
