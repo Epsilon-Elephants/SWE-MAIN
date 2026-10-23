@@ -53,6 +53,13 @@ Professor saves assignment and problems
 AI grading and score persistence are future steps. The student Rocky dialog is
 a separate question-and-answer interaction.
 
+Each professor class has one **Open roster** button. Its dialog shows a searchable,
+paginated roster with class grades, grade editing, and confirmed student removal;
+**Add students** switches to the enrollment view in the same dialog. Every
+enrollment, removal, and grade write checks that the acting user is the class's
+current professor. Manual grades update the enrollment's `grade.earned` and
+`grade.possible` values; they do not grade individual homework submissions.
+
 ## Persistence model
 
 | Collection | Purpose and important relationships |

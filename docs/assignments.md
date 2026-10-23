@@ -10,13 +10,15 @@ values mean midnight UTC; timezone-aware `datetime` values are converted to UTC
 and naive datetimes are interpreted as UTC.
 
 `create_assignment(..., class_id=..., posted=..., due_date=..., problems=[...])`
-requires a nonblank title, both dates, and at least one nonblank problem string
-or structured short-answer problem (see below).
+requires a nonblank title and both dates. Publishing also requires at least one
+nonblank problem string or structured short-answer problem (see below). Drafts
+may have an empty problem list so professors can finish authoring later.
 Problems are stored with generated IDs as part of the same insert.
 Dates can be changed with `update_assignment` or
 `update_class_assignment` using the same keyword arguments. Omitted update
-arguments preserve existing dates. Missing or cleared dates, empty problem lists,
-and a deadline before the posted date are rejected when saving assignments.
+arguments preserve existing dates. Missing or cleared dates and a deadline before
+the posted date are rejected when saving assignments. Publishing an empty problem
+list is rejected.
 The last problem cannot be removed; delete the assignment instead if needed.
 
 `list_assignments_for_student(user_id)` returns published or closed assignments
@@ -38,10 +40,14 @@ trusted grading code with a calculated score and the authenticated user's ID.
 Use `list_completed_assignments_for_user` or `list_completions_for_assignment`
 to retrieve history.
 
-The professor create form includes a required first problem. The create/edit
-forms require a title, both dates, and at least one problem and save assignments as
-`published`: the posted date controls when students can first see them. The
-professor editor uses these dates instead of a manual status selector. Students can open Homework from their dashboard, select an assignment, answer
+The professor create form offers **Post homework** and **Finish later**. Posting
+saves as `published`: the posted date controls when students can first see it.
+Finish later saves a private `draft`, which can be reopened under Draft assignments
+and posted from the editor once a problem has been added. Both actions require a
+title and valid dates. In the editor, save each problem's changes before posting
+or finishing later. Finish later saves assignment details and returns to the
+assignment list; previously published or closed homework keeps its status.
+Students can open Homework from their dashboard, select an assignment, answer
 its questions, and submit. Grading is not connected yet; the scored completion
 helpers remain reserved for trusted grading code.
 

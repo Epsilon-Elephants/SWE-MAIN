@@ -32,10 +32,12 @@ def _show_create_assignment_dialog(professor_id):
         description = st.text_area("Description")
         posted = st.date_input("Posted date", help="Students can see this assignment starting on this date (UTC).")
         due_date = st.date_input("Due date", help="Students can still complete the assignment after this date.")
-        first_problem = problem_editor("First problem (required)", key="create_assignment_first_problem")
-        submitted = st.form_submit_button("Create assignment")
+        first_problem = problem_editor("First problem", key="create_assignment_first_problem")
+        st.caption("Post homework to make it available on the posted date, or finish later to save a private draft.")
+        submitted = st.form_submit_button("Post homework", type="primary")
+        finish_later = st.form_submit_button("Finish later")
 
-    if submitted:
+    if submitted or finish_later:
         try:
             if not title.strip():
                 raise ValueError("Assignment title is required.")
@@ -43,17 +45,20 @@ def _show_create_assignment_dialog(professor_id):
                 raise ValueError("Posted date and due date are required.")
             if due_date < posted:
                 raise ValueError("Due date cannot be before the posted date.")
-            if not first_problem.strip():
+            if submitted and not first_problem.strip():
                 raise ValueError("At least one problem is required.")
             create_assignment(
                 title, professor_id, description, class_id=class_id,
-                posted=posted, due_date=due_date, status="published",
-                problems=[first_problem],
+                posted=posted, due_date=due_date, status="published" if submitted else "draft",
+                problems=[first_problem] if first_problem.strip() else [],
             )
         except (ValueError, RuntimeError, PyMongoError) as error:
             st.error(str(error))
         else:
-            st.session_state.professor_assignment_success = "Assignment created."
+            st.session_state.professor_assignment_success = (
+                "Homework posted (available from the posted date)." if submitted
+                else "Draft saved. Open it under Draft assignments to finish later."
+            )
             st.rerun()
 
 

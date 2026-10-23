@@ -56,7 +56,7 @@ show_assignment_editor("{assignment_id}", "{professor_id}")
             self.assertTrue(next(button for button in app.button if button.label == "Remove problem").disabled)
             self.assertFalse(any(widget.label == "Status" for widget in app.selectbox))
             app.date_input[1].set_value(date(2026, 11, 10))
-            next(button for button in app.button if button.label == "Save assignment").click().run()
+            next(button for button in app.button if button.label == "Post homework").click().run()
             self.assertFalse(app.exception)
             update.assert_called_once_with(
                 assignment_id, professor_id, "Homework", "", "published",
@@ -131,3 +131,50 @@ professorDash().load_dash()
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def test_finish_later_creates_private_draft_without_a_problem():
+    professor_id, class_id = str(ObjectId()), ObjectId()
+    app = AppTest.from_string(f'''
+from pages.dashboards.professor import _show_create_assignment_dialog
+_show_create_assignment_dialog("{professor_id}")
+''')
+    with patch.object(db, "find", return_value=[{"_id": class_id, "name": "Logic"}]), patch(
+        "pages.dashboards.professor.create_assignment",
+    ) as create:
+        app.run()
+        app.text_input[0].set_value("Unfinished homework")
+        next(button for button in app.button if button.label == "Finish later").click().run()
+    assert not app.exception
+    assert create.call_args.kwargs["status"] == "draft"
+    assert create.call_args.kwargs["problems"] == []
+    assert "Draft saved" in app.session_state.professor_assignment_success
+
+
+@pytest.mark.parametrize("status,expected", [("draft", "draft"), ("published", "published"), ("closed", "closed")])
+def test_finish_later_saves_and_returns_to_assignments(status, expected):
+    professor_id, assignment_id = str(ObjectId()), str(ObjectId())
+    assignment = {
+        "professor_id": professor_id, "title": "Homework", "status": status,
+        "posted": date(2026, 11, 1), "due_date": date(2026, 11, 8), "problems": [],
+    }
+    if status != "draft":
+        assignment["problems"] = [{"problem_id": "first", "content": "Solve this"}]
+    app = AppTest.from_string(f'''
+import streamlit as st
+from pages.assignment_editor import show_assignment_editor
+if st.session_state.get("selected_assignment_id"):
+    show_assignment_editor("{assignment_id}", "{professor_id}")
+else:
+    st.write("Assignment list")
+''')
+    app.session_state.selected_assignment_id = assignment_id
+    with patch("pages.assignment_editor.get_assignment", return_value=assignment), patch(
+        "pages.assignment_editor.update_assignment", return_value=True,
+    ) as update:
+        app.run()
+        app.text_input[0].set_value("Updated homework")
+        next(button for button in app.button if button.label == "Finish later").click().run()
+    assert not app.exception
+    assert update.call_args.args[2:5] == ("Updated homework", "", expected)
+    assert "selected_assignment_id" not in app.session_state

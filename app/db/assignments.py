@@ -30,9 +30,10 @@ def _schedule(posted, due_date):
     return {"posted": posted, "due_date": due_date}
 
 
-def _schedule_update(query, posted, due_date):
+def _schedule_update(query, posted, due_date, status):
     existing = db.read_one("assignments", query) or {}
-    _require_problems(existing.get("problems"))
+    if status != "draft":
+        _require_problems(existing.get("problems"))
     return _schedule(
         existing.get("posted") if posted is _UNSET else posted,
         existing.get("due_date") if due_date is _UNSET else due_date,
@@ -94,7 +95,7 @@ def create_assignment(
     if db.read_one("classes", {"_id": class_id, "instructor_id": instructor_id}) is None:
         raise ValueError("Select a class that you teach.")
 
-    problem_documents = normalize_problems(problems)
+    problem_documents = [] if status == "draft" and not problems else normalize_problems(problems)
 
     assignment = {
         "title": title,
@@ -153,7 +154,7 @@ def update_assignment(
         "description": description.strip(),
         "status": status,
         **_schedule_update(
-            {"_id": assignment_id, "professor_id": professor_id}, posted, due_date,
+            {"_id": assignment_id, "professor_id": professor_id}, posted, due_date, status,
         ),
     }
 
