@@ -64,6 +64,7 @@ render_professor_classes("{professor_id}")
             test_app.run()
             listing.assert_called_with("", 0, 10, instructor_id=str(professor_id), active_only=True)
             test_app.button(key=f"professor_class_{class_id}").click().run()
+            test_app.segmented_control[0].set_value("Add students").run()
             test_app.button(key=f"professor_add_{class_id}_{student_id}").click().run()
             self.assertFalse(test_app.exception)
             enroll.assert_called_once_with(str(class_id), student_id, str(professor_id))
@@ -102,3 +103,43 @@ render_professor_classes("{professor_id}")
         self.assertEqual(set(update["$setOnInsert"]), {"created_at", "grade"})
         self.assertEqual(update["$setOnInsert"]["grade"], {"earned": 0.0, "possible": 0.0})
         self.assertTrue(students.update_one.call_args.kwargs["upsert"])
+
+
+class TestRosterMutations(unittest.TestCase):
+    def test_grade_and_removal_are_scoped_to_enrollment(self):
+        class_id, student_id, professor_id = ObjectId(), ObjectId(), ObjectId()
+        with patch.object(db, "authorize_class_enrollment") as authorize, patch.object(
+            db, "update_one", return_value=MagicMock(matched_count=1),
+        ) as update, patch.object(db, "delete_one", return_value=MagicMock(deleted_count=1)) as delete:
+            db.update_student_grade_as(str(class_id), str(student_id), str(professor_id), 8, 10)
+            authorize.assert_called_with(str(class_id), str(professor_id))
+            update.assert_called_once_with("students", {"class_id": class_id, "user_id": student_id},
+                                           {"grade": {"earned": 8.0, "possible": 10.0}})
+            db.remove_student_as(str(class_id), str(student_id), str(professor_id))
+            delete.assert_called_once_with("students", {"class_id": class_id, "user_id": student_id})
+            self.assertEqual(authorize.call_count, 2)
+
+    def test_grade_and_removal_recheck_current_professor(self):
+        for method, extra in ((db.update_student_grade_as, (8, 10)), (db.remove_student_as, ())):
+            for role in ("student", "admin", "professor"):
+                with self.subTest(method=method.__name__, role=role), patch.object(
+                    db, "read_one", side_effect=[{"permissions": role}, {"instructor_id": ObjectId()}],
+                ), patch.object(db, "update_one") as update, patch.object(db, "delete_one") as delete:
+                    with self.assertRaises(ValueError):
+                        method(ObjectId(), ObjectId(), ObjectId(), *extra)
+                    update.assert_not_called()
+                    delete.assert_not_called()
+
+    def test_invalid_grades_and_missing_enrollment_never_succeed(self):
+        with patch.object(db, "authorize_class_enrollment"), patch.object(db, "update_one") as update:
+            for earned, possible in ((-1, 10), (1, -1), (float("nan"), 10), (1, float("inf")), (True, 10), (1, 0)):
+                with self.subTest(earned=earned, possible=possible), self.assertRaises(ValueError):
+                    db.update_student_grade_as(ObjectId(), ObjectId(), ObjectId(), earned, possible)
+            update.assert_not_called()
+            update.return_value.matched_count = 0
+            with self.assertRaisesRegex(ValueError, "no longer enrolled"):
+                db.update_student_grade_as(ObjectId(), ObjectId(), ObjectId(), 8, 10)
+        with patch.object(db, "authorize_class_enrollment"), patch.object(
+            db, "delete_one", return_value=MagicMock(deleted_count=0),
+        ), self.assertRaisesRegex(ValueError, "no longer enrolled"):
+            db.remove_student_as(ObjectId(), ObjectId(), ObjectId())

@@ -27,7 +27,7 @@ def test_creation_requires_all_assignment_fields(missing):
     fields.update(missing)
     with patch.object(db, "read_one", return_value={}), patch.object(db, "insert_one") as insert:
         with pytest.raises(ValueError):
-            create_assignment(professor_id=str(ObjectId()), class_id=ObjectId(), **fields)
+            create_assignment(professor_id=str(ObjectId()), class_id=ObjectId(), status="published", **fields)
         insert.assert_not_called()
 
 
@@ -44,7 +44,7 @@ def test_professor_cannot_save_incomplete_assignments(missing):
     with patch.object(db, "read_one", return_value=existing), patch.object(db, "update_one") as update:
         with pytest.raises(ValueError):
             title = missing.get("title", "Homework")
-            update_assignment(ObjectId(), "professor", title)
+            update_assignment(ObjectId(), "professor", title, status="published")
         update.assert_not_called()
 
 
@@ -86,3 +86,20 @@ class TestAssignmentClasses(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     create_assignment("Homework", str(ObjectId()), class_id=class_id)
                 insert.assert_not_called()
+
+
+def test_empty_draft_can_be_created_and_saved_but_cannot_be_posted():
+    from unittest.mock import MagicMock
+    assignment = {"posted": date(2026, 11, 1), "due_date": date(2026, 11, 8), "problems": []}
+    with patch.object(db, "read_one", return_value={}), patch.object(db, "insert_one") as insert:
+        create_assignment("Draft", str(ObjectId()), class_id=ObjectId(), status="draft", **assignment)
+    assert insert.call_args.args[1]["problems"] == []
+    assert insert.call_args.args[1]["status"] == "draft"
+    with patch.object(db, "read_one", return_value=assignment), patch.object(
+        db, "update_one", return_value=MagicMock(matched_count=1),
+    ) as update:
+        assert update_assignment(ObjectId(), "professor", "Draft", status="draft")
+        update.reset_mock()
+        with pytest.raises(ValueError, match="At least one problem is required"):
+            update_assignment(ObjectId(), "professor", "Draft", status="published")
+        update.assert_not_called()

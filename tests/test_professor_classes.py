@@ -76,3 +76,50 @@ def test_enrollment_dialog_rechecks_authorization_before_loading_students():
     assert app.error[0].value == "Access denied"
     authorize.assert_called_once_with(str(class_id), "professor-id")
     students.assert_not_called()
+
+
+def test_roster_shows_grades_saves_changes_and_removes_with_confirmation():
+    class_id, student_id = ObjectId(), ObjectId()
+    classroom = {"_id": class_id, "name": "Logic"}
+    student = {"_id": student_id, "email": "ada@example.com", "grade": {"earned": 8, "possible": 10}}
+    row_key = f"{class_id}_{student_id}"
+    with patch.object(db, "list_classes_page", return_value=([classroom], False)), patch.object(
+        db, "authorize_class_enrollment", return_value=classroom,
+    ), patch.object(db, "list_students_for_class", return_value=([student], False)) as listing, patch.object(
+        db, "update_student_grade_as",
+    ) as update, patch.object(db, "remove_student_as") as remove:
+        app = classes_app().run()
+        assert [button.label for button in app.button] == ["Open roster"]
+        app.button(key=f"professor_class_{class_id}").click().run()
+        assert not app.exception
+        listing.assert_called_with(str(class_id), enrolled=True, search="", page=0, page_size=10)
+        assert any("80.0%" in caption.value for caption in app.caption)
+        assert app.button(key=f"professor_remove_{row_key}").disabled
+        app.number_input(key=f"earned_{row_key}").set_value(9.0)
+        next(button for button in app.button if button.label == "Save grade").click().run()
+        assert not app.exception
+        update.assert_called_once_with(str(class_id), student_id, "professor-id", 9.0, 10.0)
+        app.checkbox(key=f"confirm_remove_{row_key}").check().run()
+        app.button(key=f"professor_remove_{row_key}").click().run()
+        assert not app.exception
+        remove.assert_called_once_with(str(class_id), student_id, "professor-id")
+        app.button(key="professor_close_roster").click().run()
+        assert not app.exception
+        assert "professor_enrollment_class" not in app.session_state
+
+
+def test_roster_save_error_preserves_inputs_and_shows_error():
+    class_id, student_id = ObjectId(), ObjectId()
+    classroom = {"_id": class_id, "name": "Logic"}
+    with patch.object(db, "list_classes_page", return_value=([classroom], False)), patch.object(
+        db, "authorize_class_enrollment", return_value=classroom,
+    ), patch.object(db, "list_students_for_class", return_value=([{"_id": student_id}], False)), patch.object(
+        db, "update_student_grade_as", side_effect=ValueError("Access denied"),
+    ):
+        app = classes_app().run()
+        app.button(key=f"professor_class_{class_id}").click().run()
+        app.number_input(key=f"earned_{class_id}_{student_id}").set_value(3.0)
+        next(button for button in app.button if button.label == "Save grade").click().run()
+        assert not app.exception
+        assert app.error[0].value == "Access denied"
+        assert app.number_input(key=f"earned_{class_id}_{student_id}").value == 3.0
