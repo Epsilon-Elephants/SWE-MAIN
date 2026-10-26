@@ -6,6 +6,7 @@ from dotenv import load_dotenv
 
 import os
 import re
+from math import isfinite
 from datetime import datetime, timezone
 
 from bson import ObjectId
@@ -172,7 +173,7 @@ class DataBase:
         return students[:page_size], len(students) > page_size
 
     def authorize_class_enrollment(self, class_id, actor_id):
-        """Allow the class's current professor to manage enrollment."""
+        """Allow the class's current professor to manage its roster and grades."""
         actor_id = self._object_id(actor_id, "user ID")
         class_id = self._object_id(class_id, "class ID")
         actor = self.read_one("users", {"_id": actor_id})
@@ -182,11 +183,36 @@ class DataBase:
         role = (actor or {}).get("permissions")
         if role == "professor" and classroom.get("instructor_id") == actor_id:
             return classroom
-        raise ValueError("You can only add students to classes you teach.")
+        raise ValueError("You can only manage classes you teach.")
 
     def enroll_student_as(self, class_id, user_id, actor_id):
         self.authorize_class_enrollment(class_id, actor_id)
         return self.enroll_student(class_id, user_id)
+
+    def remove_student_as(self, class_id, user_id, actor_id):
+        self.authorize_class_enrollment(class_id, actor_id)
+        result = self.delete_one("students", {
+            "class_id": self._object_id(class_id, "class ID"),
+            "user_id": self._object_id(user_id, "user ID"),
+        })
+        if not result.deleted_count:
+            raise ValueError("That student is no longer enrolled in this class.")
+        return result
+
+    def update_student_grade_as(self, class_id, user_id, actor_id, earned, possible):
+        self.authorize_class_enrollment(class_id, actor_id)
+        for value in (earned, possible):
+            if isinstance(value, bool) or not isinstance(value, (int, float)) or not isfinite(value) or value < 0:
+                raise ValueError("Grade points must be finite, nonnegative numbers.")
+        if possible == 0 and earned != 0:
+            raise ValueError("Possible points must be greater than zero when earned points are entered.")
+        result = self.update_one("students", {
+            "class_id": self._object_id(class_id, "class ID"),
+            "user_id": self._object_id(user_id, "user ID"),
+        }, {"grade": {"earned": float(earned), "possible": float(possible)}})
+        if not result.matched_count:
+            raise ValueError("That student is no longer enrolled in this class.")
+        return result
 
     def enroll_student(self, class_id, user_id):
         class_id = self._object_id(class_id, "class ID")

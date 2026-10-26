@@ -1,9 +1,9 @@
 # Database functions for homework assignments
 
-from uuid import uuid4
 from datetime import date, datetime, time, timezone
 
 from db.DataBase import db
+from homework.schema import normalize_problem, normalize_problems
 
 
 _UNSET = object()
@@ -30,9 +30,10 @@ def _schedule(posted, due_date):
     return {"posted": posted, "due_date": due_date}
 
 
-def _schedule_update(query, posted, due_date):
+def _schedule_update(query, posted, due_date, status):
     existing = db.read_one("assignments", query) or {}
-    _require_problems(existing.get("problems"))
+    if status != "draft":
+        _require_problems(existing.get("problems"))
     return _schedule(
         existing.get("posted") if posted is _UNSET else posted,
         existing.get("due_date") if due_date is _UNSET else due_date,
@@ -94,11 +95,7 @@ def create_assignment(
     if db.read_one("classes", {"_id": class_id, "instructor_id": instructor_id}) is None:
         raise ValueError("Select a class that you teach.")
 
-    problem_documents = [
-        {"problem_id": str(uuid4()), "content": content.strip()}
-        for content in (problems or [])
-    ]
-    _require_problems(problem_documents)
+    problem_documents = [] if status == "draft" and not problems else normalize_problems(problems)
 
     assignment = {
         "title": title,
@@ -157,7 +154,7 @@ def update_assignment(
         "description": description.strip(),
         "status": status,
         **_schedule_update(
-            {"_id": assignment_id, "professor_id": professor_id}, posted, due_date,
+            {"_id": assignment_id, "professor_id": professor_id}, posted, due_date, status,
         ),
     }
 
@@ -184,25 +181,19 @@ def delete_assignment(assignment_id, professor_id: str):
 
 
 # add a problem to an assignment and return the new problem ID
-def add_problem(assignment_id, professor_id: str, content: str):
+def add_problem(assignment_id, professor_id: str, content: str | dict):
     if not assignment_id:
         raise ValueError("Assignment ID is required.")
     if not professor_id:
         raise ValueError("Professor ID is required.")
 
-    content = content.strip()
-    if not content:
-        raise ValueError("Problem content is required.")
+    problem = normalize_problem(content)
 
     query = {"_id": assignment_id, "professor_id": professor_id}
     assignment = db.read_one("assignments", query)
     if assignment is None:
         return None
 
-    problem = {
-        "problem_id": str(uuid4()),
-        "content": content,
-    }
     problems = list(assignment.get("problems", []))
     problems.append(problem)
 
@@ -218,7 +209,7 @@ def update_problem(
     assignment_id,
     professor_id: str,
     problem_id: str,
-    content: str,
+    content: str | dict,
 ):
     if not assignment_id:
         raise ValueError("Assignment ID is required.")
@@ -227,8 +218,7 @@ def update_problem(
     if not problem_id:
         raise ValueError("Problem ID is required.")
 
-    content = content.strip()
-    if not content:
+    if isinstance(content, str) and not content.strip():
         raise ValueError("Problem content is required.")
 
     query = {"_id": assignment_id, "professor_id": professor_id}
@@ -239,7 +229,8 @@ def update_problem(
     problems = [dict(problem) for problem in assignment.get("problems", [])]
     for problem in problems:
         if problem.get("problem_id") == problem_id:
-            problem["content"] = content
+            source = {**problem, "content": content} if isinstance(content, str) else content
+            problem.update(normalize_problem(source, problem_id=problem_id))
             result = db.update_one("assignments", query, {"problems": problems})
             return result.matched_count > 0
 

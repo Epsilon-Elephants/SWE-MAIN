@@ -1,5 +1,5 @@
 /* wide content area for 4 cards plus arrows to fit */
-.block-container { max-width: 1100px !important; margin: 0 auto !important; }
+.block-container { padding-top: 5rem !important; max-width: 1100px !important; margin: 0 auto !important; }
 
  /* shape for option buttons */
 div.stButton > button { border-radius: 999px; width: 100%; }

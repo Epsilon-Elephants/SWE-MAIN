@@ -1,7 +1,7 @@
 import streamlit as st
 from pymongo.errors import PyMongoError
 
-from components.problem_editor import problem_editor
+from components.problem_editor import grading_fields, problem_editor
 from db.assignments import (
     add_problem,
     delete_assignment,
@@ -29,6 +29,10 @@ def show_assignment_editor(assignment_id, professor_id: str):
 
     assignment_key = str(assignment_id)
     st.subheader("Assignment editor")
+    if message := st.session_state.pop("professor_assignment_success", None):
+        st.success(message)
+    is_draft = assignment.get("status", "draft") == "draft"
+    st.caption("Save changes to individual problems below before posting or finishing later.")
 
     with st.form(f"assignment_{assignment_key}"):
         title = st.text_input("Title", value=assignment.get("title", ""))
@@ -43,9 +47,12 @@ def show_assignment_editor(assignment_id, professor_id: str):
             "Due date", value=assignment.get("due_date"),
             help="Students can still complete the assignment after this date.",
         )
-        save_assignment = st.form_submit_button("Save assignment")
+        save_assignment = st.form_submit_button(
+            "Post homework" if is_draft else "Save assignment", type="primary",
+        )
+        finish_later = st.form_submit_button("Finish later")
 
-    if save_assignment:
+    if save_assignment or finish_later:
         try:
             if not title.strip():
                 raise ValueError("Assignment title is required.")
@@ -53,17 +60,25 @@ def show_assignment_editor(assignment_id, professor_id: str):
                 raise ValueError("Posted date and due date are required.")
             if due_date < posted:
                 raise ValueError("Due date cannot be before the posted date.")
-            if not assignment.get("problems"):
+            status = assignment.get("status", "draft") if finish_later else "published"
+            if status != "draft" and not assignment.get("problems"):
                 raise ValueError("At least one problem is required. Add a problem before saving.")
-            update_assignment(
+            saved = update_assignment(
                 assignment_id,
                 professor_id,
                 title,
                 description,
-                "published",
+                status,
                 posted=posted,
                 due_date=due_date,
             )
+            if not saved:
+                raise ValueError("Assignment could not be saved. Reload and try again.")
+            st.session_state.professor_assignment_success = (
+                "Draft saved." if status == "draft" else "Homework saved (available from the posted date)."
+            )
+            if finish_later:
+                st.session_state.pop("selected_assignment_id", None)
             st.rerun()
         except (ValueError, RuntimeError, PyMongoError) as error:
             st.error(str(error))
@@ -91,6 +106,7 @@ def show_assignment_editor(assignment_id, professor_id: str):
                 key=f"content_{assignment_key}_{problem_id}",
                 initial_content=problem.get("content", ""),
             )
+            problem_fields = grading_fields(content, problem)
             save_problem = st.form_submit_button("Save problem")
             remove_problem = st.form_submit_button(
                 "Remove problem", disabled=len(assignment.get("problems", [])) <= 1,
@@ -102,7 +118,7 @@ def show_assignment_editor(assignment_id, professor_id: str):
                     assignment_id,
                     professor_id,
                     problem_id,
-                    content,
+                    problem_fields,
                 )
                 st.rerun()
             if remove_problem:
@@ -116,11 +132,12 @@ def show_assignment_editor(assignment_id, professor_id: str):
             "New problem",
             key=f"new_content_{assignment_key}",
         )
+        new_fields = grading_fields(new_content)
         add_submitted = st.form_submit_button("Add problem")
 
     if add_submitted:
         try:
-            add_problem(assignment_id, professor_id, new_content)
+            add_problem(assignment_id, professor_id, new_fields)
             st.rerun()
         except (ValueError, RuntimeError, PyMongoError) as error:
             st.error(str(error))
