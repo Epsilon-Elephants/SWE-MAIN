@@ -9,6 +9,8 @@ from streamlit.testing.v1 import AppTest
 
 from db.DataBase import db
 
+pytestmark = pytest.mark.regression
+
 
 def classes_app(role="professor"):
     return AppTest.from_string(f'''

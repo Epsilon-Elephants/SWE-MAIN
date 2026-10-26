@@ -4,12 +4,15 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import app
+import pytest
 from bson import ObjectId
 
 sys.path.append(str(Path(__file__).resolve().parents[1] / "app"))
 
 from db.DataBase import db
 from streamlit.testing.v1 import AppTest
+
+pytestmark = pytest.mark.regression
 
 
 class TestClassDatabase(unittest.TestCase):
