@@ -73,14 +73,14 @@ def _due_sort_key(assignment):
 def _load_assignment_context(professor_id, assignments):
     """Return ({class_id: name}, {assignment_id: completion summary}) for the cards.
 
-    These are nice-to-have details, so a failure shows a note instead of hiding the .
+    These are nice-to-have details, so a failure shows a note instead of hiding the dashboard.
     """
     try:
         classes = db.find("classes", {"instructor_id": db._object_id(professor_id, "professor ID")})
         class_names = {classroom["_id"]: classroom.get("name", "Untitled class") for classroom in classes}
         completions = summarize_completions([assignment["_id"] for assignment in assignments])
     except (ValueError, RuntimeError, PyMongoError):
-        logger.exception("Failed to load professor  details")
+        logger.exception("Failed to load professor dashboard details")
         st.caption("Class names and submission counts are unavailable right now.")
         return {}, {}
     return class_names, completions
