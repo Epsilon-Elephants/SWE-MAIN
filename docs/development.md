@@ -69,11 +69,20 @@ See [Assignments and submissions](assignments.md) before applying it.
 
 ## Tests
 
+Install `requirements-dev.txt` and run from the repository root:
+
 ```bash
 python -m pytest
+python -m pytest -m unit
+python -m pytest -m regression
 ```
 
-To run only the existing problem-format and submission-flow tests:
+The markers overlap: unit tests isolate functions and data contracts, while
+regression tests protect current application rules and flows. Running the full
+suite executes each test once. See the [README testing guide](../README.md#testing)
+for coverage scope, adding tests, and the future Playwright/Chromium phase.
+
+To run only the problem-format and submission-flow regressions:
 
 ```bash
 python -m pytest tests/test_homework.py
@@ -85,10 +94,11 @@ To run the same coverage command as CI:
 python -m pytest --cov=app --cov-report=term-missing --cov-report=xml --cov-report=html --junitxml=test-results.xml
 ```
 
-`tests/conftest.py` exposes the `app/` import path and blocks live MongoDB access
-for the default test suite. Tests mock database operations; Rocky tests mock HTTP
-requests. Streamlit interaction tests use `AppTest`. Running the suite does not
-require live database credentials or a Rocky token.
+`tests/conftest.py` exposes the `app/` import path and blocks live MongoDB and HTTP
+access for the default test suite. Tests mock database operations; Rocky tests
+mock HTTP requests. Existing Streamlit page regressions use `AppTest`. Running
+the suite does not require `.env`, live credentials, an app server, or a browser.
+Playwright is not installed in this phase; browser/behavioral tests are deferred.
 
 CI runs on pushes, pull requests, merge groups, and manual dispatch, and uploads
 coverage/test reports as the `test-reports` artifact. Passing these mocked tests
@@ -104,6 +114,7 @@ does not verify live database configuration or Rocky availability.
 | Student has no homework | Check enrollment, assignment status, and posted date. Date-only inputs become midnight UTC. |
 | Rocky unavailable | Check `ROCKY_KEY`, endpoint connectivity, and server logs. Homework submission itself does not call Rocky. |
 | Tests attempt to connect to MongoDB | Mock the relevant database helper; the test fixture intentionally rejects live connections. |
+| Tests attempt a live HTTP request | Mock the HTTP call (for example, Rocky's `requests.get`/`requests.post`); the shared fixture intentionally blocks real requests. |
 
 For changes to the grading contract, update [the AI guide](ai-grading.md),
 [problem JSON Schema](homework-problem.schema.json), and normalization/tests

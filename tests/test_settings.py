@@ -3,10 +3,13 @@ import unittest
 from pathlib import Path
 
 import app
+import pytest
 
 sys.path.append(str(Path(__file__).resolve().parents[1] / "app"))
 
 from streamlit.testing.v1 import AppTest
+
+pytestmark = pytest.mark.regression
 
 
 class TestSettings(unittest.TestCase):

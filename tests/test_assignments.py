@@ -14,6 +14,8 @@ from db.assignments import (
     create_assignment, delete_problem, update_assignment,
 )
 
+pytestmark = [pytest.mark.unit, pytest.mark.regression]
+
 
 @pytest.mark.parametrize("missing", [
     {"title": "  "}, {"posted": None}, {"due_date": None},
