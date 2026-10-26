@@ -4,6 +4,8 @@ from contextlib import closing
 import streamlit as st
 
 from pages.dashboards.dashboard import Dashboard
+from pages.dashboards.student import homework, assignments, practice
+from pages.dashboards.student.common import get_view, open_view
 from rocky.rocky import rocky
 from dotenv import load_dotenv
 from pathlib import Path
@@ -11,6 +13,15 @@ import base64
 import logging
 import requests
 import streamlit.components.v1 as components
+from ddgs import DDGS
+
+
+views  = {
+    "homework": homework.render,
+    "assignments": assignments.render,
+    "practice": practice.render
+}
+
 
 # placeholder until real data is added
 recently_visited = [
@@ -27,7 +38,7 @@ option = ["Homework", "Assignments", "Practice"]
 
 
 # path for Rocky icon image
-rocky_path = Path(__file__).resolve().parents[2] / "assets" / "rocky_icon.png"
+rocky_path = Path(__file__).resolve().parents[3] / "assets" / "rocky.svg"
 
 # path for css styling
 css_path = Path(__file__).resolve().parent / "student.css"
@@ -43,6 +54,7 @@ def rocky_css() -> str:
    if not rocky_path.exists():
       return ""
 # turns the image into text so it can be placed in the CSS
+   mime = "image/svg+xml" if rocky_path.suffix.lower() == ".svg" else "image/png"
    encoded = base64.b64encode(rocky_path.read_bytes()).decode("ascii")
    return f"""
 
@@ -51,7 +63,7 @@ def rocky_css() -> str:
 .st-key-student_rocky_button button:hover,
 .st-key-student_rocky_button button:focus,
 .st-key-student_rocky_button button:active {{
-    background: transparent url("data:image/png;base64,{encoded}") center / contain no-repeat !important;
+    background: transparent url("data:{mime};base64,{encoded}") center / contain no-repeat !important;
     border: none !important;
     box-shadow: none !important;
 }}
@@ -138,36 +150,74 @@ def rocky_dialog() -> None:
 class studentDash(Dashboard):
     def __init__(self):
         super().__init__()
-# load/draw the whole page top to bottom        
+# load/draw the whole page top to bottom
     def load_dash(self):
-        super().load_dash()
 
         st.markdown(load_css() + rocky_css(), unsafe_allow_html=True)
 
-        st.write("")
-        self.render_search()
-        st.write("")
-        st.write("")
-        self.render_recently_visited()
+        render = views.get(get_view())
+        if render:
+            render()
+        else:
+            super().load_dash()
+            st.write("")
+            self.render_search()
+            st.write("")
+            st.write("")
+            self.render_recently_visited()
         self.render_rocky_button()
 
 # search bar with 3 buttons underneath
     def render_search(self):
         _, middle, _ = st.columns([1,2,1])
         with middle:
-            st.text_input(
+            # convert input into a query
+            query = st.text_input(
                 "Search for resources",
-                placeholder= "Search for resources",
+                placeholder="Search for resources",
                 label_visibility="collapsed",
                 key="student_search_query",
             )
+
             pill_cols = st.columns(len(option))
             for col, label in zip(pill_cols, option):
-                col.button(label, key=f"student_filter_{label}", width="stretch")
+                if label == "Homework":
+                    if col.button(label, key=f"student_filter_{label}", width="stretch"):
+                        st.switch_page("pages/homework.py")
+                else:
+                    col.button(
+                        label, key=f"student_filter_{label}", width="stretch",
+                        on_click=open_view, args=(label.lower(),),
+                    )
+
+            # if anything is typed search for it
+            if query:
+                with st.spinner("Searching..."):
+                    try:
+                        # get top 5 results
+                        results = DDGS().text(query, max_results=5)
+
+                        if results:
+                            for r in results:
+                                # clickable title
+                                st.markdown(f"**[{r['title']}]({r['href']})**")
+
+                                # Limit the description to 200 characters so it doesn't flood the whole page
+                                description = r['body']
+                                if len(description) > 200:
+                                    description = description[:200] + "..."
+
+                                # show description and divider between results
+                                st.caption(description)
+                                st.divider()
+                        else:
+                            st.info("No results found.")
+                    except Exception:
+                        st.error("Search is temporarily unavailable.")
 
 # the "Recently visited" sesction with placeholder cards that scroll sideways
     def render_recently_visited(self):
-        st.markdown( 
+        st.markdown(
             '<div class="section-title">Recently visited</div>',
             unsafe_allow_html=True,)
 
@@ -187,7 +237,7 @@ class studentDash(Dashboard):
 # loads the wheel scroll script
         components.html(wheel_script, height=0)
 
-# loads rocky button in botttom right corner 
+# loads rocky button in botttom right corner
     def render_rocky_button(self):
         if st.button("Rocky", key="student_rocky_button", help="Need help?"):
                     rocky_dialog()

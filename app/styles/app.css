@@ -39,21 +39,15 @@
 
 /* Double the previous 2.6rem navigation height and 1.2rem label size.
    Explicit keys keep table actions and other tertiary buttons unaffected. */
-:is(.st-key-admin_settings_open, .st-key-admin_header_back,
-    .st-key-settings_back, .st-key-back_to_class_roster,
-    .st-key-back_to_classes, .st-key-create_back_to_classes,
-    .st-key-browse_back_to_classes, .st-key-classes_return_to_admin,
-    .st-key-return_to_admin_dashboard) button {
+:is(.st-key-dashboard_settings_open, .st-key-dashboard_header_back,
+    .st-key-settings_back) button {
     min-height: 5.2rem;
     min-width: 5.2rem;
     padding: 1rem 1.5rem;
 }
 
-:is(.st-key-admin_settings_open, .st-key-admin_header_back,
-    .st-key-settings_back, .st-key-back_to_class_roster,
-    .st-key-back_to_classes, .st-key-create_back_to_classes,
-    .st-key-browse_back_to_classes, .st-key-classes_return_to_admin,
-    .st-key-return_to_admin_dashboard) button p {
+:is(.st-key-dashboard_settings_open, .st-key-dashboard_header_back,
+    .st-key-settings_back) button p {
     font-size: 2.4rem;
     line-height: 1.2;
 }
@@ -68,4 +62,31 @@
 .stMain .st-key-back_to_assignments button p {
     font-size: 0.8rem;
     line-height: 1.2;
+}
+
+.st-key-settings_account_card,
+.st-key-settings_session_card {
+    padding: 1.1rem;
+    border: 1px solid rgba(128, 128, 128, 0.4);
+    border-radius: 18px;
+    background: rgba(128, 128, 128, 0.12);
+}
+
+.st-key-settings_account_card {
+    min-height: 300px;
+}
+
+.st-key-settings_session_card {
+    margin-top: 1rem;
+}
+
+.dashboard-page-subtitle {
+    margin: -0.7rem 0 1rem;
+    text-align: center;
+    color: rgba(128, 128, 128, 0.95);
+}
+
+.st-key-settings_session_card [data-testid="stMarkdownContainer"],
+:is(.st-key-settings_account_card, .st-key-settings_session_card) h3 {
+    text-align: center;
 }

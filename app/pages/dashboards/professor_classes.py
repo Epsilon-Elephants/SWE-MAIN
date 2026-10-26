@@ -4,7 +4,6 @@ import streamlit as st
 from pymongo.errors import PyMongoError
 
 from db.DataBase import db
-from pages.dashboards.admin.classes import _grade_label, _student_label
 
 logger = logging.getLogger(__name__)
 
@@ -13,97 +12,10 @@ def _dismiss_enrollment():
     st.session_state.pop("professor_enrollment_class", None)
 
 
-def _dismiss_roster():
-    st.session_state.pop("professor_roster_class", None)
-    st.session_state.pop("professor_roster_student", None)
-
-
-def _open_enrollment(class_id):
-    _dismiss_roster()
-    st.session_state.professor_student_page = 0
-    st.session_state.pop("professor_enrollment_success", None)
-    st.session_state.professor_enrollment_class = class_id
-
-
-def _open_roster(class_id):
-    _dismiss_enrollment()
-    st.session_state.professor_roster_page = 0
-    st.session_state.pop("professor_roster_success", None)
-    st.session_state.pop("professor_roster_student", None)
-    st.session_state.professor_roster_class = class_id
-
-
-def _manage_student(student):
-    st.session_state.professor_roster_student = student
-
-
-def _back_to_roster():
-    st.session_state.pop("professor_roster_student", None)
-
-
-def _grade_values(student):
-    grade = student.get("grade") or {}
-    values = []
-    for field in ("earned", "possible"):
-        value = grade.get(field, 0)
-        if hasattr(value, "to_decimal"):
-            value = value.to_decimal()
-        values.append(float(value))
-    return values
-
-
-def _render_managed_student(class_id, professor_id, student):
-    st.button("← Roster", key="professor_roster_back", on_click=_back_to_roster, type="tertiary")
-    st.markdown(f"**{_student_label(student)}**")
-    earned, possible = _grade_values(student)
-    with st.form("professor_grade_form"):
-        earned_column, possible_column = st.columns(2)
-        new_earned = earned_column.number_input("Points earned", min_value=0.0, value=earned, step=1.0)
-        new_possible = possible_column.number_input("Points possible", min_value=0.0, value=possible, step=1.0)
-        save = st.form_submit_button("Update grade", type="primary")
-    if save:
-        try:
-            db.update_student_grade_as(class_id, student["_id"], new_earned, new_possible, professor_id)
-        except (ValueError, RuntimeError, PyMongoError) as error:
-            logger.exception("Failed to update a student grade")
-            st.error(str(error) if isinstance(error, ValueError) else "Could not update the grade.")
-        else:
-            st.session_state.professor_roster_student = {
-                **student, "grade": {"earned": new_earned, "possible": new_possible},
-            }
-            st.success("Grade updated.")
-
-    st.divider()
-    confirm = st.checkbox("Confirm removing this student from the class", key="professor_confirm_remove")
-    if st.button("Remove from class", key="professor_remove_student", disabled=not confirm):
-        try:
-            db.remove_student_from_class_as(class_id, student["_id"], professor_id)
-        except (ValueError, RuntimeError, PyMongoError) as error:
-            logger.exception("Failed to remove a student")
-            st.error(str(error) if isinstance(error, ValueError) else "Could not remove the student.")
-        else:
-            _back_to_roster()
-            st.session_state.professor_roster_success = "Student removed from the class."
-            st.rerun()
-
-
-@st.dialog("Class roster", width="large", on_dismiss=_dismiss_roster)
-def _show_roster(class_id, professor_id):
-    try:
-        classroom = db.authorize_class_enrollment(class_id, professor_id)
-    except (ValueError, RuntimeError, PyMongoError) as error:
-        st.error(str(error) if isinstance(error, ValueError) else "Could not load this class.")
-        return
-
-    st.subheader(classroom["name"])
-    if message := st.session_state.pop("professor_roster_success", None):
-        st.success(message)
-    if student := st.session_state.get("professor_roster_student"):
-        _render_managed_student(class_id, professor_id, student)
-        return
-
+def _render_roster(class_id, professor_id):
+    st.caption("Class grades use earned and possible points. Save each student's grade separately.")
     search = st.text_input(
-        "Search enrolled students", key=f"professor_roster_search_{class_id}", max_chars=100,
+        "Search roster by name or email", key=f"professor_roster_search_{class_id}", max_chars=100,
     ).strip()
     settings = (class_id, search)
     if st.session_state.get("professor_roster_settings") != settings:
@@ -115,34 +27,51 @@ def _show_roster(class_id, professor_id):
             class_id, enrolled=True, search=search, page=page, page_size=10,
         )
     except (ValueError, RuntimeError, PyMongoError):
-        logger.exception("Failed to load class roster")
+        logger.exception("Failed to load roster")
         st.error("Could not load the roster. Try again.")
         return
-
     if not students:
-        st.info("No enrolled students found.")
+        st.info("No enrolled students found. Use Add students to enroll students in this class.")
     for student in students:
-        label, grade, action = st.columns([4, 1.5, 1], vertical_alignment="center")
-        label.write(_student_label(student))
-        grade.write(_grade_label(student))
-        action.button(
-            "Manage", key=f"professor_manage_{class_id}_{student['_id']}",
-            on_click=_manage_student, args=(student,),
-        )
+        student_id = student["_id"]
+        row_key = f"{class_id}_{student_id}"
+        name = " ".join(filter(None, [student.get("first_name"), student.get("last_name")]))
+        grade = student.get("grade") or {}
+        earned, possible = float(grade.get("earned", 0)), float(grade.get("possible", 0))
+        with st.container(border=True):
+            st.write(f"{name or 'Unnamed student'} — {student.get('email', 'No email')}")
+            st.caption(f"Grade: {earned:g} / {possible:g} ({earned / possible:.1%})" if possible else "Grade: Not graded yet")
+            with st.form(f"professor_grade_{row_key}"):
+                earned_input = st.number_input("Earned points", min_value=0.0, value=earned, key=f"earned_{row_key}")
+                possible_input = st.number_input("Possible points", min_value=0.0, value=possible, key=f"possible_{row_key}")
+                save_grade = st.form_submit_button("Save grade")
+            confirmed = st.checkbox("Confirm removal from class", key=f"confirm_remove_{row_key}")
+            remove = st.button("Remove student", disabled=not confirmed, key=f"professor_remove_{row_key}")
+            try:
+                if save_grade:
+                    db.update_student_grade_as(class_id, student_id, professor_id, earned_input, possible_input)
+                    st.session_state.professor_enrollment_success = "Grade saved."
+                    st.rerun()
+                if remove:
+                    db.remove_student_as(class_id, student_id, professor_id)
+                    st.session_state.professor_enrollment_success = "Student removed from the class."
+                    st.session_state.professor_roster_page = 0
+                    st.rerun()
+            except (ValueError, RuntimeError, PyMongoError) as error:
+                logger.exception("Failed to update roster")
+                st.error(str(error) if isinstance(error, ValueError) else "Could not save the change. Try again.")
+    st.caption(f"Page {page + 1}")
+    previous, following = st.columns(2)
+    if previous.button("Previous", disabled=page == 0, key="professor_roster_previous"):
+        st.session_state.professor_roster_page = page - 1
+        st.rerun()
+    if following.button("Next", disabled=not has_next, key="professor_roster_next"):
+        st.session_state.professor_roster_page = page + 1
+        st.rerun()
 
-    if page or has_next:
-        st.caption(f"Page {page + 1}")
-        previous, following = st.columns(2)
-        if previous.button("Previous", disabled=page == 0, key="professor_roster_previous"):
-            st.session_state.professor_roster_page = page - 1
-            st.rerun()
-        if following.button("Next", disabled=not has_next, key="professor_roster_next"):
-            st.session_state.professor_roster_page = page + 1
-            st.rerun()
 
-
-@st.dialog("Add students", width="large", on_dismiss=_dismiss_enrollment)
-def _add_students(class_id, professor_id):
+@st.dialog("Class roster and grades", width="large", on_dismiss=_dismiss_enrollment)
+def _manage_class(class_id, professor_id):
     try:
         classroom = db.authorize_class_enrollment(class_id, professor_id)
     except (ValueError, RuntimeError, PyMongoError) as error:
@@ -150,9 +79,19 @@ def _add_students(class_id, professor_id):
         return
 
     st.subheader(classroom["name"])
-    st.caption("Students are enrolled immediately. Student approval is not required.")
     if message := st.session_state.pop("professor_enrollment_success", None):
         st.success(message)
+    if st.button("Close", key="professor_close_roster"):
+        _dismiss_enrollment()
+        st.rerun()
+    section = st.segmented_control(
+        "Class management", ["Roster and grades", "Add students"],
+        default="Roster and grades", key=f"professor_class_section_{class_id}",
+    )
+    if section != "Add students":
+        _render_roster(class_id, professor_id)
+        return
+    st.caption("Students are enrolled immediately. Student approval is not required.")
     search = st.text_input(
         "Search students by name or email",
         key=f"professor_student_search_{class_id}", max_chars=100,
@@ -225,15 +164,12 @@ def render_professor_classes(professor_id):
         with st.container(border=True):
             st.markdown(f"**{classroom['name']}**")
             st.caption("Active class")
-            roster_column, add_column = st.columns(2)
-            roster_column.button(
-                "View roster", key=f"professor_roster_{class_id}",
-                on_click=_open_roster, args=(class_id,),
-            )
-            add_column.button(
-                "Add students", key=f"professor_class_{class_id}",
-                on_click=_open_enrollment, args=(class_id,),
-            )
+            if st.button("Open roster", key=f"professor_class_{class_id}"):
+                st.session_state.professor_student_page = 0
+                st.session_state.professor_roster_page = 0
+                st.session_state.pop(f"professor_class_section_{class_id}", None)
+                st.session_state.pop("professor_enrollment_success", None)
+                st.session_state.professor_enrollment_class = class_id
     if page or has_next:
         st.caption(f"Page {page + 1}")
         previous, following = st.columns(2)
@@ -245,6 +181,4 @@ def render_professor_classes(professor_id):
             st.rerun()
 
     if class_id := st.session_state.get("professor_enrollment_class"):
-        _add_students(class_id, professor_id)
-    elif class_id := st.session_state.get("professor_roster_class"):
-        _show_roster(class_id, professor_id)
+        _manage_class(class_id, professor_id)

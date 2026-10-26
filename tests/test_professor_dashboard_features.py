@@ -57,6 +57,23 @@ def test_closing_does_not_revalidate_but_publishing_does():
         update.assert_not_called()
 
 
+def test_reopening_validates_schedule_and_preserves_content():
+    assignment_id, professor_id = ObjectId(), str(ObjectId())
+    assignment = {
+        "posted": date(2026, 11, 1), "due_date": date(2026, 11, 8),
+        "problems": [{"problem_id": "first", "content": "Solve this"}],
+    }
+    with patch.object(db, "read_one", return_value=assignment), patch.object(
+        db, "update_one", return_value=SimpleNamespace(matched_count=1),
+    ) as update:
+        assert set_assignment_status(assignment_id, professor_id, "published")
+    update.assert_called_once_with(
+        "assignments", {"_id": assignment_id, "professor_id": professor_id},
+        {"status": "published", "posted": datetime(2026, 11, 1, tzinfo=timezone.utc),
+         "due_date": datetime(2026, 11, 8, tzinfo=timezone.utc)},
+    )
+
+
 def dashboard_app(professor_id):
     return AppTest.from_string(f'''
 import streamlit as st
@@ -177,15 +194,13 @@ def test_roster_updates_grade_through_authorized_helper():
         db, "update_student_grade_as",
     ) as update_grade:
         app = roster_app().run()
-        app.button(key=f"professor_roster_{class_id}").click().run()
+        app.button(key=f"professor_class_{class_id}").click().run()
         assert not app.exception
         listing.assert_called_with(str(class_id), enrolled=True, search="", page=0, page_size=10)
-        app.button(key=f"professor_manage_{class_id}_{student_id}").click().run()
+        app.number_input(key=f"earned_{class_id}_{student_id}").set_value(8.0)
+        next(button for button in app.button if button.label == "Save grade").click().run()
         assert not app.exception
-        app.number_input[0].set_value(8.0)
-        next(button for button in app.button if button.label == "Update grade").click().run()
-        assert not app.exception
-    update_grade.assert_called_once_with(str(class_id), student_id, 8.0, 10.0, "professor-id")
+    update_grade.assert_called_once_with(str(class_id), student_id, "professor-id", 8.0, 10.0)
 
 
 def test_roster_rechecks_authorization():
@@ -194,7 +209,7 @@ def test_roster_rechecks_authorization():
         db, "authorize_class_enrollment", side_effect=ValueError("Access denied"),
     ), patch.object(db, "list_students_for_class") as students:
         app = roster_app().run()
-        app.button(key=f"professor_roster_{class_id}").click().run()
+        app.button(key=f"professor_class_{class_id}").click().run()
     assert not app.exception
     assert app.error[0].value == "Access denied"
     students.assert_not_called()
@@ -202,11 +217,11 @@ def test_roster_rechecks_authorization():
 
 def test_authorized_roster_helpers_check_before_writing():
     with patch.object(db, "authorize_class_enrollment", side_effect=ValueError("nope")), patch.object(
-        db, "remove_student_from_class",
-    ) as remove, patch.object(db, "update_student_grade") as grade:
+        db, "delete_one",
+    ) as remove, patch.object(db, "update_one") as grade:
         with pytest.raises(ValueError):
-            db.remove_student_from_class_as(ObjectId(), ObjectId(), ObjectId())
+            db.remove_student_as(ObjectId(), ObjectId(), ObjectId())
         with pytest.raises(ValueError):
-            db.update_student_grade_as(ObjectId(), ObjectId(), 1, 2, ObjectId())
+            db.update_student_grade_as(ObjectId(), ObjectId(), ObjectId(), 1, 2)
     remove.assert_not_called()
     grade.assert_not_called()

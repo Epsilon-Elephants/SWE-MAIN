@@ -115,7 +115,8 @@ def authenticate_user(email: str, password: str) -> tuple [dict | None, str]:
         user = database.read_one("users", {"email": emailS})
     except (PyMongoError, RuntimeError):
         return None, "Login is temporarily unavailable."
-    if user and _verify_password(password, user.get("password_hash", "")):
+    if (user and user.get("permissions") in {"student", "professor"}
+            and _verify_password(password, user.get("password_hash", ""))):
         database.delete_one("rate_limits", {"action": "login", "identifier": emailS})
         return {
             "id": str(user["_id"]),
