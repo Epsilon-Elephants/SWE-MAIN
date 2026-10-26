@@ -37,7 +37,7 @@ option = ["Homework", "Assignments", "Practice"]
 
 
 # path for Rocky icon image
-rocky_path = Path(__file__).resolve().parents[3] / "assets" / "rocky_icon.png"
+rocky_path = Path(__file__).resolve().parents[3] / "assets" / "rocky.svg"
 
 # path for css styling
 css_path = Path(__file__).resolve().parent / "student.css"
@@ -53,6 +53,7 @@ def rocky_css() -> str:
    if not rocky_path.exists():
       return ""
 # turns the image into text so it can be placed in the CSS
+   mime = "image/svg+xml" if rocky_path.suffix.lower() == ".svg" else "image/png"
    encoded = base64.b64encode(rocky_path.read_bytes()).decode("ascii")
    return f"""
 
@@ -61,7 +62,7 @@ def rocky_css() -> str:
 .st-key-student_rocky_button button:hover,
 .st-key-student_rocky_button button:focus,
 .st-key-student_rocky_button button:active {{
-    background: transparent url("data:image/png;base64,{encoded}") center / contain no-repeat !important;
+    background: transparent url("data:{mime};base64,{encoded}") center / contain no-repeat !important;
     border: none !important;
     box-shadow: none !important;
 }}
