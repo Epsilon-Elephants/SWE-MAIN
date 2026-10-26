@@ -5,19 +5,16 @@ import streamlit as st
 from pages.settings import open_settings
 
 
-def render_admin_header(
+def render_dashboard_header(
     title,
     subtitle=None,
     back_label=None,
     back_callback=None,
-    back_key="admin_header_back",
+    back_key="dashboard_header_back",
 ):
-    """Render consistent admin navigation, page identity, and account controls."""
-    st.session_state.setdefault("admin_compact_tables", False)
-    st.session_state.setdefault("admin_default_page_size", 10)
-
+    """Render consistent dashboard navigation, page identity, and account controls."""
     back_column, title_column, menu_column = st.columns(
-        [1.2, 5, 1.2], vertical_alignment="center",
+        [2, 5, 2], vertical_alignment="center",
     )
     if back_label and back_callback:
         back_column.button(
@@ -25,21 +22,22 @@ def render_admin_header(
             key=back_key,
             on_click=back_callback,
             type="tertiary",
+            width="stretch",
         )
 
     title_column.title(title, text_alignment="center")
     if subtitle:
         title_column.markdown(
-            f"<p class='admin-page-subtitle'>{escape(subtitle)}</p>",
+            f"<p class='dashboard-page-subtitle'>{escape(subtitle)}</p>",
             unsafe_allow_html=True,
         )
 
     menu_column.button(
         "⚙",
-        key="admin_settings_open",
+        key="dashboard_settings_open",
         help="Account and settings",
         on_click=open_settings,
-        args=(st.session_state.get("admin_page", "dashboard"),),
+        args=(st.session_state.get("professor_page", "dashboard"),),
         type="tertiary",
         width="stretch",
     )

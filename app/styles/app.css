@@ -1,0 +1,92 @@
+/* Shared alignment without changing form fields, tables, or editor content. */
+.stMain .block-container {
+    max-width: 1100px;
+    margin-inline: auto;
+    padding-top: 2rem;
+}
+
+.stMain :is(h1, h2, h3),
+.stMain [data-testid="stHeadingWithActionElements"] {
+    text-align: center;
+    justify-content: center;
+}
+
+.stMain :is(.stButton, .stFormSubmitButton) {
+    display: flex;
+    justify-content: center;
+}
+
+.stMain :is(.stButton, .stFormSubmitButton) > button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 2.75rem;
+    padding: 0.65rem 1.25rem;
+    border-radius: 999px;
+    text-align: center;
+}
+
+.stMain :is(.stButton, .stFormSubmitButton) > button p {
+    text-align: center;
+    margin: 0;
+    overflow-wrap: anywhere;
+}
+
+[class*="st-key-assignment_card_"] [data-testid="stMarkdownContainer"],
+[class*="st-key-assignment_card_"] [data-testid="stCaptionContainer"] {
+    text-align: center;
+}
+
+/* Double the previous 2.6rem navigation height and 1.2rem label size.
+   Explicit keys keep table actions and other tertiary buttons unaffected. */
+:is(.st-key-dashboard_settings_open, .st-key-dashboard_header_back,
+    .st-key-settings_back) button {
+    min-height: 5.2rem;
+    min-width: 5.2rem;
+    padding: 1rem 1.5rem;
+}
+
+:is(.st-key-dashboard_settings_open, .st-key-dashboard_header_back,
+    .st-key-settings_back) button p {
+    font-size: 2.4rem;
+    line-height: 1.2;
+}
+
+/* Keep the assignment editor's return action compact. */
+.stMain .st-key-back_to_assignments button {
+    min-height: 1.73rem;
+    min-width: 1.73rem;
+    padding: 0.33rem 0.5rem;
+}
+
+.stMain .st-key-back_to_assignments button p {
+    font-size: 0.8rem;
+    line-height: 1.2;
+}
+
+.st-key-settings_account_card,
+.st-key-settings_session_card {
+    padding: 1.1rem;
+    border: 1px solid rgba(128, 128, 128, 0.4);
+    border-radius: 18px;
+    background: rgba(128, 128, 128, 0.12);
+}
+
+.st-key-settings_account_card {
+    min-height: 300px;
+}
+
+.st-key-settings_session_card {
+    margin-top: 1rem;
+}
+
+.dashboard-page-subtitle {
+    margin: -0.7rem 0 1rem;
+    text-align: center;
+    color: rgba(128, 128, 128, 0.95);
+}
+
+.st-key-settings_session_card [data-testid="stMarkdownContainer"],
+:is(.st-key-settings_account_card, .st-key-settings_session_card) h3 {
+    text-align: center;
+}

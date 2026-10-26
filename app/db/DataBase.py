@@ -6,12 +6,11 @@ from dotenv import load_dotenv
 
 import os
 import re
-import math
+from math import isfinite
 from datetime import datetime, timezone
 
 from bson import ObjectId
 from bson.errors import InvalidId
-from pymongo.synchronous.database import Database
 from pymongo.collation import Collation
 
 
@@ -89,55 +88,6 @@ class DataBase:
         collection = self._get_collection(collection_name)
         return collection.find(query)
 
-    def ensure_user_directory_indexes(self):
-        collection = self._get_collection("users")
-        for field in ("first_name", "last_name", "email", "permissions", "created_at"):
-            collection.create_index(
-                [(field, 1), ("_id", 1)],
-                name=f"admin_directory_{field}",
-                collation=Collation(locale="en", strength=2),
-            )
-
-    def list_users_page(
-        self, search="", sort_field="first_name", descending=False,
-        page=0, page_size=25,
-    ):
-        """Fetch only one page plus a lookahead; never retrieve password hashes."""
-        if sort_field not in {"first_name", "last_name", "email", "permissions", "created_at"}:
-            raise ValueError("Unsupported user sort field.")
-        if page < 0 or page_size not in (10, 25, 50, 100):
-            raise ValueError("Invalid pagination settings.")
-
-        query = {}
-        if search.strip():
-            # Escape regex syntax so user input is always a literal substring.
-            pattern = re.escape(search.strip()[:100])
-            query = {"$or": [
-                {field: {"$regex": pattern, "$options": "i"}}
-                for field in ("first_name", "last_name", "email")
-            ]}
-        direction = -1 if descending else 1
-        cursor = self._get_collection("users").find(query, {
-            "_id": 0, "first_name": 1, "last_name": 1,
-            "email": 1, "permissions": 1, "created_at": 1,
-        }).collation(Collation(locale="en", strength=2)).sort([
-            (sort_field, direction), ("_id", direction),
-        ]).skip(page * page_size).limit(page_size + 1).max_time_ms(5000)
-        users = list(cursor)
-        return users[:page_size], len(users) > page_size
-
-    def ensure_class_admin_indexes(self):
-        self._get_collection("classes").create_index(
-            [("name", 1), ("_id", 1)],
-            name="admin_classes_name",
-            collation=Collation(locale="en", strength=2),
-        )
-        self._get_collection("students").create_index(
-            [("class_id", 1), ("user_id", 1)],
-            name="class_student_membership",
-            unique=True,
-        )
-
     def list_classes_page(self, search="", page=0, page_size=25, instructor_id=None, active_only=False):
         if page < 0 or page_size not in (10, 25, 50, 100):
             raise ValueError("Invalid pagination settings.")
@@ -174,38 +124,6 @@ class DataBase:
             for document in visible_classes:
                 document["instructor"] = instructor_map.get(document.get("instructor_id"))
         return visible_classes, len(classes) > page_size
-
-    def list_instructors(self, limit=200):
-        if limit < 1 or limit > 500:
-            raise ValueError("Invalid instructor limit.")
-        cursor = (
-            self._get_collection("users")
-            .find(
-                {"permissions": "professor"},
-                {"first_name": 1, "last_name": 1, "email": 1},
-            )
-            .collation(Collation(locale="en", strength=2))
-            .sort([("last_name", 1), ("first_name", 1), ("_id", 1)])
-            .limit(limit)
-            .max_time_ms(5000)
-        )
-        return list(cursor)
-
-    def create_class(self, name: str, instructor_id):
-        name = name.strip()
-        if not name:
-            raise ValueError("Class name is required.")
-        if not instructor_id:
-            raise ValueError("Instructor is required.")
-        instructor_id = self._object_id(instructor_id, "instructor ID")
-        if self._get_collection("users").count_documents(
-            {"_id": instructor_id, "permissions": "professor"}, limit=1,
-        ) == 0:
-            raise ValueError("Select a valid instructor.")
-        return self.insert_one("classes", {
-            "name": name,
-            "instructor_id": instructor_id,
-        })
 
     @staticmethod
     def _object_id(value, label):
@@ -255,7 +173,7 @@ class DataBase:
         return students[:page_size], len(students) > page_size
 
     def authorize_class_enrollment(self, class_id, actor_id):
-        """Allow admins or the class's current professor to manage enrollment."""
+        """Allow the class's current professor to manage its roster and grades."""
         actor_id = self._object_id(actor_id, "user ID")
         class_id = self._object_id(class_id, "class ID")
         actor = self.read_one("users", {"_id": actor_id})
@@ -263,15 +181,38 @@ class DataBase:
         if not classroom:
             raise ValueError("That class no longer exists.")
         role = (actor or {}).get("permissions")
-        if role == "admin" or (
-            role == "professor" and classroom.get("instructor_id") == actor_id
-        ):
+        if role == "professor" and classroom.get("instructor_id") == actor_id:
             return classroom
-        raise ValueError("You can only add students to classes you teach.")
+        raise ValueError("You can only manage classes you teach.")
 
     def enroll_student_as(self, class_id, user_id, actor_id):
         self.authorize_class_enrollment(class_id, actor_id)
         return self.enroll_student(class_id, user_id)
+
+    def remove_student_as(self, class_id, user_id, actor_id):
+        self.authorize_class_enrollment(class_id, actor_id)
+        result = self.delete_one("students", {
+            "class_id": self._object_id(class_id, "class ID"),
+            "user_id": self._object_id(user_id, "user ID"),
+        })
+        if not result.deleted_count:
+            raise ValueError("That student is no longer enrolled in this class.")
+        return result
+
+    def update_student_grade_as(self, class_id, user_id, actor_id, earned, possible):
+        self.authorize_class_enrollment(class_id, actor_id)
+        for value in (earned, possible):
+            if isinstance(value, bool) or not isinstance(value, (int, float)) or not isfinite(value) or value < 0:
+                raise ValueError("Grade points must be finite, nonnegative numbers.")
+        if possible == 0 and earned != 0:
+            raise ValueError("Possible points must be greater than zero when earned points are entered.")
+        result = self.update_one("students", {
+            "class_id": self._object_id(class_id, "class ID"),
+            "user_id": self._object_id(user_id, "user ID"),
+        }, {"grade": {"earned": float(earned), "possible": float(possible)}})
+        if not result.matched_count:
+            raise ValueError("That student is no longer enrolled in this class.")
+        return result
 
     def enroll_student(self, class_id, user_id):
         class_id = self._object_id(class_id, "class ID")
@@ -290,37 +231,6 @@ class DataBase:
             }},
             upsert=True,
         )
-
-    def remove_student_from_class(self, class_id, user_id):
-        class_id = self._object_id(class_id, "class ID")
-        user_id = self._object_id(user_id, "user ID")
-        return self._get_collection("students").delete_one({
-            "class_id": class_id,
-            "user_id": user_id,
-        })
-
-    def update_student_grade(self, class_id, user_id, earned, possible):
-        class_id = self._object_id(class_id, "class ID")
-        user_id = self._object_id(user_id, "user ID")
-        try:
-            earned = float(earned)
-            possible = float(possible)
-        except (TypeError, ValueError) as error:
-            raise ValueError("Grade values must be numbers.") from error
-        if not math.isfinite(earned) or not math.isfinite(possible):
-            raise ValueError("Grade values must be finite numbers.")
-        if earned < 0 or possible < 0:
-            raise ValueError("Grade values cannot be negative.")
-        if possible == 0 and earned != 0:
-            raise ValueError("Earned points must be 0 when possible points are 0.")
-
-        result = self._get_collection("students").update_one(
-            {"class_id": class_id, "user_id": user_id},
-            {"$set": {"grade": {"earned": earned, "possible": possible}}},
-        )
-        if result.matched_count == 0:
-            raise ValueError("That student is no longer enrolled in this class.")
-        return result
 
     # UPDATE: change specific fields on a matching document.
     def update_one(self, collection_name: str, query: dict, fields: dict):
