@@ -1,7 +1,12 @@
 import unittest
 from datetime import datetime
 
+import pytest
+from bson import ObjectId
+
 from app.rocky.analyzer import analyze_student_weaknesses
+
+pytestmark = [pytest.mark.unit, pytest.mark.regression]
 
 class TestAnalyzer(unittest.TestCase):
     def setUp(self):
@@ -44,6 +49,37 @@ class TestAnalyzer(unittest.TestCase):
     def test_empty_data(self):
         self.assertEqual(analyze_student_weaknesses([], self.questions), [])
         self.assertEqual(analyze_student_weaknesses([{"question_id": "q1", "correct": True}], []), [])
+
+def test_unknown_questions_and_questions_without_topics_are_ignored():
+    question_id = ObjectId()
+    questions = [{"_id": question_id, "topic": "Logic"},
+                 {"_id": "empty", "topic": ""}, {"_id": "missing"}, {"topic": "No ID"}]
+    attempts = [{"question_id": str(question_id), "correct": True},
+                {"question_id": "unknown", "correct": False},
+                {"question_id": "empty", "correct": False},
+                {"question_id": "missing", "correct": False}]
+    assert analyze_student_weaknesses(attempts, questions) == [
+        {"topic": "Logic", "accuracy": 1.0, "questions_attempted": 1},
+    ]
+
+
+def test_equal_accuracy_prioritizes_topic_with_more_attempts():
+    questions = [{"_id": "a", "topic": "A"}, {"_id": "b", "topic": "B"}]
+    attempts = [{"question_id": "a", "correct": True}, {"question_id": "a", "correct": False},
+                *[{"question_id": "b", "correct": value} for value in (True, False, True, False)]]
+    assert analyze_student_weaknesses(attempts, questions) == [
+        {"topic": "B", "accuracy": 0.5, "questions_attempted": 4},
+        {"topic": "A", "accuracy": 0.5, "questions_attempted": 2},
+    ]
+
+
+def test_accuracy_is_rounded_after_counting_attempts():
+    questions = [{"_id": "a", "topic": "Logic"}]
+    attempts = [{"question_id": "a", "correct": value} for value in (True, False, False)]
+    assert analyze_student_weaknesses(attempts, questions) == [
+        {"topic": "Logic", "accuracy": 0.33, "questions_attempted": 3},
+    ]
+
 
 if __name__ == '__main__':
     unittest.main()

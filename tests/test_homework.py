@@ -15,6 +15,8 @@ from db.assignments import create_assignment, update_problem
 from db.homework_submissions import get_homework_for_student, submit_homework
 from homework.schema import build_grading_payload, normalize_problem, normalize_problems
 
+pytestmark = pytest.mark.regression
+
 
 @pytest.fixture
 def homework():

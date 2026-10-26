@@ -8,6 +8,8 @@ from streamlit.testing.v1 import AppTest
 
 from app.rocky.rocky import rocky
 
+pytestmark = pytest.mark.regression
+
 
 @pytest.fixture
 def client(monkeypatch):

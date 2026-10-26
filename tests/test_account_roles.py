@@ -7,6 +7,8 @@ from streamlit.testing.v1 import AppTest
 
 from auth.auth import authenticate_user, database
 
+pytestmark = pytest.mark.regression
+
 
 @pytest.mark.parametrize("role", ["admin", "unknown", None])
 def test_login_rejects_unsupported_roles(role):
