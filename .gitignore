@@ -1,6 +1,11 @@
 /.env
 /.venv/
 __pycache__/
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
+test-results.xml
 .agents/skills/developing-with-streamlit
 .claude/skills/developing-with-streamlit
 /.idea

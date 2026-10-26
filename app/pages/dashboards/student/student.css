@@ -1,15 +1,16 @@
 /* wide content area for 4 cards plus arrows to fit */
-.block-container { max-width: 1100px !important; margin: 0 auto !important; }
+.block-container { padding-top: 5rem !important; max-width: 1100px !important; margin: 0 auto !important; }
 
  /* shape for option buttons */
 div.stButton > button { border-radius: 999px; width: 100%; }
 
 /* recently visited cards */
-.section-title { font-weight: 600; font-size: 1.05rem; margin-bottom: 0.6rem; }
+.section-title { text-align: center; font-weight: 600; font-size: 1.05rem; margin-bottom: 0.6rem; }
 
 .card {
    flex: 0 0 calc((100% - 4rem) / 4.3);
    scroll-snap-align: start;
+   text-align: center;
    background: rgba(128,128,128, 0.15);
    border-radius: 18px;
    padding: 12px 12px 14px 12px;
