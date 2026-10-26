@@ -198,7 +198,7 @@ class professorDash(Dashboard):
             return
 
         render_dashboard_header(
-            "Professor dashboard",
+            "Professor Dashboard",
             f"Welcome back, {st.session_state.user.get('first_name') or 'Professor'}",
         )
 
