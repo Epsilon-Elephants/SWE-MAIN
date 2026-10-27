@@ -16,7 +16,9 @@ import streamlit as st
 # return a dictionary too
 def problem_editor(label: str, key: str, initial_content: str = "") -> str:
     # temporary plain-text implementation
-    return st.text_area(label, value=initial_content, key=key)
+    value = st.text_area(label, value=initial_content, key=key, height=160)
+    st.caption("Unicode logic symbols and LaTeX are welcome, for example: ¬ ∧ ∨ → ↔ ∀ ∃ ⊢ ⊨. Paste symbols directly into your question.")
+    return value
 
 
 # Edit this function if logic symbols need special rendering. LaTeX content could use st.latex()

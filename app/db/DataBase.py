@@ -1,7 +1,6 @@
 import streamlit as st
 import pymongo as pM
 from pymongo import ReturnDocument
-from pymongo.errors import PyMongoError
 from dotenv import load_dotenv
 
 import os
@@ -45,11 +44,10 @@ class DataBase:
             if not db_name:
                 db_name = st.secrets["DB_NAME"]
 
-            client = pM.MongoClient(uri)
+            client = pM.MongoClient(uri, serverSelectionTimeoutMS=5000, connectTimeoutMS=5000)
             self._db = client[db_name]
-        except PyMongoError as e:
-            print(f"Error connecting to MongoDB: {e}")
-            return None
+        except (KeyError, FileNotFoundError) as error:
+            raise RuntimeError("Database is not configured.") from error
         return self._db
 
     def _get_collection(self, collection_name: str):
@@ -132,6 +130,8 @@ class DataBase:
 
     @staticmethod
     def _object_id(value, label):
+        if not isinstance(value, (str, ObjectId)):
+            raise ValueError(f"Invalid {label}.")
         try:
             return value if isinstance(value, ObjectId) else ObjectId(value)
         except (InvalidId, TypeError) as error:

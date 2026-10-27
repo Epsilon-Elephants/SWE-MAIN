@@ -1,5 +1,3 @@
-from html import escape
-
 import streamlit as st
 
 from pages.settings import open_settings
@@ -25,19 +23,16 @@ def render_dashboard_header(
             width="stretch",
         )
 
-    title_column.title(title, text_alignment="center")
+    title_column.title(title)
     if subtitle:
-        title_column.markdown(
-            f"<p class='dashboard-page-subtitle'>{escape(subtitle)}</p>",
-            unsafe_allow_html=True,
-        )
+        title_column.caption(subtitle)
 
-    menu_column.button(
-        "⚙",
+    if menu_column.button(
+        "Account",
+        icon=":material/settings:",
         key="dashboard_settings_open",
         help="Account and settings",
-        on_click=open_settings,
-        args=(st.session_state.get("professor_page", "dashboard"),),
         type="tertiary",
         width="stretch",
-    )
+    ):
+        open_settings()

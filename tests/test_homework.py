@@ -214,7 +214,7 @@ show_assignment_editor("{homework['_id']}", "{professor_id}")
 ''')
     with patch("pages.assignment_editor.get_assignment", return_value=homework), patch(
         "pages.assignment_editor.update_problem", return_value=True,
-    ) as update, patch("pages.assignment_editor.list_submissions_for_assignment", return_value=[]):
+    ) as update, patch("pages.assignment_editor.list_homework_submissions_for_professor", return_value=[]):
         app.run()
         assert not app.exception
         app.number_input[0].set_value(3.0)

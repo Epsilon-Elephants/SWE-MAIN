@@ -21,8 +21,8 @@ pytestmark = pytest.mark.regression
 ])
 def test_create_form_rejects_blank_required_content(title, problem, message):
     app = AppTest.from_string(f'''
-from pages.dashboards.professor import _show_create_assignment_dialog
-_show_create_assignment_dialog("{ObjectId()}")
+from pages.dashboards.professor import render_create_assignment
+render_create_assignment("{ObjectId()}")
 ''')
     with patch.object(db, "find", return_value=[{"_id": ObjectId(), "name": "Logic"}]), patch(
         "pages.dashboards.professor.create_assignment",
@@ -52,7 +52,7 @@ show_assignment_editor("{assignment_id}", "{professor_id}")
         }
         with patch("pages.assignment_editor.get_assignment", return_value=assignment), patch(
             "pages.assignment_editor.update_assignment", return_value=True,
-        ) as update, patch("pages.assignment_editor.list_submissions_for_assignment", return_value=[]):
+        ) as update, patch("pages.assignment_editor.list_homework_submissions_for_professor", return_value=[]):
             app.run()
             self.assertFalse(app.exception)
             self.assertTrue(next(button for button in app.button if button.label == "Remove problem").disabled)
@@ -65,11 +65,12 @@ show_assignment_editor("{assignment_id}", "{professor_id}")
                 posted=date(2026, 11, 1), due_date=date(2026, 11, 10),
             )
 
-    def test_creation_schedules_assignment_using_selected_dates(self):
+    @patch("streamlit.switch_page")
+    def test_creation_schedules_assignment_using_selected_dates(self, switch_page):
         professor_id, class_id = str(ObjectId()), ObjectId()
         app = AppTest.from_string(f'''
-from pages.dashboards.professor import _show_create_assignment_dialog
-_show_create_assignment_dialog("{professor_id}")
+from pages.dashboards.professor import render_create_assignment
+render_create_assignment("{professor_id}")
 ''')
         with patch.object(db, "find", return_value=[{"_id": class_id, "name": "Logic"}]), patch(
             "pages.dashboards.professor.create_assignment",
@@ -85,13 +86,14 @@ _show_create_assignment_dialog("{professor_id}")
             create.assert_called_once_with(
                 "Homework", professor_id, "", class_id=str(class_id),
                 posted=date(2026, 11, 1), due_date=date(2026, 11, 8), status="published",
-                problems=["Solve this"],
+                problems=[{"content": "Solve this", "points": 1.0, "topic": "",
+                           "reference_answer": "", "grading_guidance": ""}],
             )
 
     def test_creation_rejects_invalid_date_order_and_preserves_input(self):
         app = AppTest.from_string(f'''
-from pages.dashboards.professor import _show_create_assignment_dialog
-_show_create_assignment_dialog("{ObjectId()}")
+from pages.dashboards.professor import render_create_assignment
+render_create_assignment("{ObjectId()}")
 ''')
         with patch.object(db, "find", return_value=[{"_id": ObjectId(), "name": "Logic"}]), patch(
             "pages.dashboards.professor.create_assignment",
@@ -135,11 +137,12 @@ if __name__ == "__main__":
     unittest.main()
 
 
-def test_finish_later_creates_private_draft_without_a_problem():
+@patch("streamlit.switch_page")
+def test_finish_later_creates_private_draft_without_a_problem(switch_page):
     professor_id, class_id = str(ObjectId()), ObjectId()
     app = AppTest.from_string(f'''
-from pages.dashboards.professor import _show_create_assignment_dialog
-_show_create_assignment_dialog("{professor_id}")
+from pages.dashboards.professor import render_create_assignment
+render_create_assignment("{professor_id}")
 ''')
     with patch.object(db, "find", return_value=[{"_id": class_id, "name": "Logic"}]), patch(
         "pages.dashboards.professor.create_assignment",
@@ -154,7 +157,8 @@ _show_create_assignment_dialog("{professor_id}")
 
 
 @pytest.mark.parametrize("status,expected", [("draft", "draft"), ("published", "published"), ("closed", "closed")])
-def test_finish_later_saves_and_returns_to_assignments(status, expected):
+@patch("streamlit.switch_page")
+def test_finish_later_saves_and_returns_to_assignments(switch_page, status, expected):
     professor_id, assignment_id = str(ObjectId()), str(ObjectId())
     assignment = {
         "professor_id": professor_id, "title": "Homework", "status": status,
@@ -173,7 +177,7 @@ else:
     app.session_state.selected_assignment_id = assignment_id
     with patch("pages.assignment_editor.get_assignment", return_value=assignment), patch(
         "pages.assignment_editor.update_assignment", return_value=True,
-    ) as update, patch("pages.assignment_editor.list_submissions_for_assignment", return_value=[]):
+    ) as update, patch("pages.assignment_editor.list_homework_submissions_for_professor", return_value=[]):
         app.run()
         app.text_input[0].set_value("Updated homework")
         next(button for button in app.button if button.label == "Finish later").click().run()

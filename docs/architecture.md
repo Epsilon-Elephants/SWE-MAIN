@@ -9,6 +9,8 @@ Python helpers directly.
 | Location | Responsibility |
 | --- | --- |
 | [`app/app.py`](../app/app.py) | Entry point, initial user state, shared styling, and role-scoped navigation. |
+| [`.streamlit/config.toml`](../.streamlit/config.toml) | Academic theme, built-in fonts, and sidebar palette. |
+| [`app/app_pages/`](../app/app_pages/) | Dedicated professor creation/editing, classes, practice status, and account routes. |
 | [`app/pages/home.py`](../app/pages/home.py), [`welcome.py`](../app/pages/welcome.py) | Show login or dispatch to the student's/professor's dashboard. |
 | [`app/auth/`](../app/auth) | Registration, password verification, and login rate limiting. |
 | [`app/pages/dashboards/`](../app/pages/dashboards) | Role-specific dashboard views, professor class management, and student Rocky dialog. |
@@ -19,6 +21,7 @@ Python helpers directly.
 | [`app/db/DataBase.py`](../app/db/DataBase.py) | Shared lazy MongoDB connection, CRUD, class queries, and enrollment checks. |
 | [`app/db/assignments.py`](../app/db/assignments.py) | Assignment ownership, scheduling, visibility, and problem edits. |
 | [`app/db/homework_submissions.py`](../app/db/homework_submissions.py) | Authorized homework reads and new ungraded submission records. |
+| [`app/db/student_dashboard.py`](../app/db/student_dashboard.py) | Real student enrollment, manual class grades, coursework, and submission metrics. |
 | [`app/db/completed_assignments.py`](../app/db/completed_assignments.py) | Trusted scored completion history, separate from submissions. |
 | [`app/rocky/`](../app/rocky) | AI transport and a standalone topic-performance analyzer. |
 
@@ -28,11 +31,15 @@ Registration creates a `student` account. Login returns a session user containin
 `id`, email, name, and `permissions`. Supported login roles are `student` and
 `professor`. Professor access must be provisioned outside public registration.
 
-`app.py` registers the Home page for everyone and explicit Homework/Assignment
-pages for students. Professor dashboard sections, including the assignment editor,
-are selected within the dashboard using session state. A file in `app/pages/`
-does not automatically become a navigable page because the entry point explicitly
-configures navigation.
+`app.py` registers the overview for everyone and shows a role-scoped sidebar.
+Professors have separate classes, creation, and editing pages; students have
+separate homework-list, assignment-taking, and practice-status pages. Both roles
+have an account page. Contextual editing/taking routes are hidden from the menu
+but registered for `st.switch_page`. New routes live in `app/app_pages/`; existing
+student homework routes keep their paths. A file in `app/pages/` does not
+automatically become navigable because the entry point explicitly configures
+navigation. Selection IDs remain in session state; refreshing in a new session
+does not restore a selected assignment.
 
 Streamlit reruns scripts after interactions. Session state holds the logged-in
 user, selected page/assignment, form widget values, and the Rocky client/answer.
@@ -52,6 +59,13 @@ Professor saves assignment and problems
 
 AI grading and score persistence are future steps. The student Rocky dialog is
 a separate question-and-answer interaction.
+
+Professor counts and the editor's submission viewer read `homework_submissions`,
+including ungraded work. Submission detail reads verify the assignment owner and
+current class instructor. The older `completed_assignments` helpers are retained
+for compatibility but no longer supply these UI counts. Student dashboards show
+manual class grades from enrollment records; these are not calculated homework
+averages. Public-web resource searches run only on explicit form submission.
 
 Each professor class has one **Open roster** button. Its dialog shows a searchable,
 paginated roster with class grades, grade editing, and confirmed student removal;

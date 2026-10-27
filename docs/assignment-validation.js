@@ -121,3 +121,6 @@ const homeworkSubmissionValidator = {
 
 addAssignmentValidator("homework_submissions", homeworkSubmissionValidator);
 db.homework_submissions.createIndex({ user_id: 1, assignment_id: 1, submitted_at: -1 });
+db.homework_submissions.createIndex({ assignment_id: 1, submitted_at: -1, _id: -1 });
+db.assignments.createIndex({ professor_id: 1, due_date: 1 });
+db.assignments.createIndex({ class_id: 1, status: 1, posted: 1 });

@@ -29,8 +29,8 @@ precedence over fallback values in Streamlit secrets. Do not put real credential
 in `.env.example` or documentation; `.env` is ignored by Git.
 
 Streamlit deployments can supply the same keys through Streamlit secrets. If you
-create a local `.streamlit/secrets.toml`, keep it out of Git; the current
-`.gitignore` does not explicitly ignore that file.
+create a local `.streamlit/secrets.toml`, keep it out of Git; `.gitignore`
+explicitly excludes that file and local environment variants.
 
 ```bash
 python -m streamlit run app/app.py
@@ -39,9 +39,10 @@ python -m streamlit run app/app.py
 Use the local URL printed by Streamlit. Launching `app/app.py` as an ordinary
 Python script does not start the Streamlit application.
 
-The Rocky modules import `requests`, which is currently provided transitively
-by Streamlit rather than declared directly in `requirements.txt`. If you reuse
-the client outside this application environment, install `requests` explicitly.
+Application dependencies have version bounds, including an explicit `requests`
+dependency for Rocky. Streamlit 1.63 or newer is required for the registered page
+visibility and UI APIs used here. The theme lives in `.streamlit/config.toml` and
+uses built-in fonts. A lockfile is not supplied yet.
 
 ## Accounts and database preparation
 
@@ -62,7 +63,7 @@ database, with the shell's working directory at the repository root, and run:
 load("docs/assignment-validation.js")
 ```
 
-This script changes database validators and creates a submission-history index;
+This script changes database validators and creates assignment/submission indexes;
 it is a manual database setup action, not an app-startup step. It does not seed
 users/classes, backfill old records, or check cross-collection relationships.
 See [Assignments and submissions](assignments.md) before applying it.

@@ -32,6 +32,37 @@ def list_submissions_for_student(user_id, assignment_id=None):
     return sorted(db.find("homework_submissions", query), key=lambda row: row["submitted_at"], reverse=True)
 
 
+def summarize_homework_submissions(assignment_ids):
+    """Count saved answers, including ungraded work, for the caller's assignments."""
+    ids = [db._object_id(value, "assignment ID") for value in assignment_ids]
+    if not ids:
+        return {}
+    rows = db.aggregate("homework_submissions", [
+        {"$match": {"assignment_id": {"$in": ids}}},
+        {"$group": {"_id": "$assignment_id", "attempts": {"$sum": 1},
+                    "students": {"$addToSet": "$user_id"}}},
+        {"$project": {"attempts": 1, "students": {"$size": "$students"}}},
+    ])
+    return {row["_id"]: {"students": row["students"], "attempts": row["attempts"]} for row in rows}
+
+
+def list_homework_submissions_for_professor(assignment_id, professor_id):
+    """Authorize the live owner and class instructor before returning private work."""
+    assignment_id = db._object_id(assignment_id, "assignment ID")
+    assignment = db.read_one("assignments", {"_id": assignment_id, "professor_id": professor_id})
+    if assignment is None:
+        raise ValueError("Assignment not found.")
+    db.authorize_class_enrollment(assignment["class_id"], professor_id)
+    return db.aggregate("homework_submissions", [
+        {"$match": {"assignment_id": assignment_id}},
+        {"$sort": {"submitted_at": -1, "_id": -1}},
+        {"$lookup": {"from": "users", "localField": "user_id", "foreignField": "_id",
+                     "pipeline": [{"$project": {"first_name": 1, "last_name": 1, "email": 1}}],
+                     "as": "user"}},
+        {"$set": {"user": {"$arrayElemAt": ["$user", 0]}}},
+    ])
+
+
 def submit_homework(assignment_id, user_id, answers):
     """Validate all answers against current problems and save a new ungraded attempt.
 

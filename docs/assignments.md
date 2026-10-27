@@ -14,8 +14,7 @@ requires a nonblank title and both dates. Publishing also requires at least one
 nonblank problem string or structured short-answer problem (see below). Drafts
 may have an empty problem list so professors can finish authoring later.
 Problems are stored with generated IDs as part of the same insert.
-Dates can be changed with `update_assignment` or
-`update_class_assignment` using the same keyword arguments. Omitted update
+Dates can be changed with `update_assignment` using the same keyword arguments. Omitted update
 arguments preserve existing dates. Missing or cleared dates and a deadline before
 the posted date are rejected when saving assignments. Publishing an empty problem
 list is rejected.
@@ -40,10 +39,11 @@ trusted grading code with a calculated score and the authenticated user's ID.
 Use `list_completed_assignments_for_user` or `list_completions_for_assignment`
 to retrieve history.
 
-The professor create form offers **Post homework** and **Finish later**. Posting
+The dedicated professor creation page offers **Post homework** and **Finish later**. Posting
 saves as `published`: the posted date controls when students can first see it.
 Finish later saves a private `draft`, which can be reopened under Draft assignments
-and posted from the editor once a problem has been added. Both actions require a
+and posted from the editor once a problem has been added. Both actions open the
+saved assignment's editor on a separate page. Both actions require a
 title and valid dates. In the editor, save each problem's changes before posting
 or finishing later. Finish later saves assignment details and returns to the
 assignment list; previously published or closed homework keeps its status.
@@ -139,8 +139,9 @@ This function is not called by the current submission flow and makes no network
 requests. The future grader must treat student answers as untrusted content,
 validate model output, and write scores through trusted server code.
 
-The validation script also installs the `homework_submissions` validator and a
-nonunique history index on `(user_id, assignment_id, submitted_at)`. Run it manually
+The validation script also installs the `homework_submissions` validator and
+nonunique indexes for student history, professor submission review, and assignment
+ownership/visibility queries. Run it manually
 against the intended database; application tests never connect to live MongoDB.
 The new collection is also created automatically on its first application insert
 if the script has not been run.
