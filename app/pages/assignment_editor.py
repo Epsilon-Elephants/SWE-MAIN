@@ -13,7 +13,8 @@ from db.assignments import (
     update_assignment,
     update_problem,
 )
-from db.completed_assignments import list_submissions_for_assignment
+from db.homework_submissions import list_submissions_for_assignment
+from homework.results import grading_action, grading_label, show_problem_result
 
 logger = logging.getLogger(__name__)
 
@@ -28,10 +29,10 @@ def _format_timestamp(value):
     return value.strftime("%b %d, %Y %H:%M UTC") if hasattr(value, "strftime") else ""
 
 
-def _render_submissions(assignment_id):
+def _render_submissions(assignment_id, professor_id):
     st.markdown("**Submissions**")
     try:
-        rows = list_submissions_for_assignment(assignment_id)
+        rows = list_submissions_for_assignment(assignment_id, professor_id)
     except (ValueError, RuntimeError, PyMongoError):
         logger.exception("Failed to load submissions")
         st.error("Could not load submissions. Try again.")
@@ -39,22 +40,33 @@ def _render_submissions(assignment_id):
     if not rows:
         st.info("No submissions yet.")
         return
-    st.caption(f"{len(rows)} student{'s' if len(rows) != 1 else ''} submitted.")
+    st.caption(f"{len(rows)} submitted attempt{'s' if len(rows) != 1 else ''}.")
     st.dataframe(
         [
             {
                 "Student": _student_name(row.get("user")),
                 "Email": (row.get("user") or {}).get("email", ""),
-                "Best score": row.get("best_score"),
-                "Latest score": row.get("latest_score"),
-                "Attempts": row.get("attempts", 0),
-                "Last submitted": _format_timestamp(row.get("last_completed")),
+                "Grade": grading_label(row),
+                "Submitted": _format_timestamp(row.get("submitted_at")),
             }
             for row in rows
         ],
         hide_index=True,
         width="stretch",
     )
+    for row in rows:
+        with st.expander(f"{_student_name(row.get('user'))} · {_format_timestamp(row.get('submitted_at'))}"):
+            st.caption(grading_label(row))
+            answers = {answer["problem_id"]: answer["answer"] for answer in row.get("answers", [])}
+            for number, problem in enumerate(row.get("assignment_snapshot", {}).get("problems", []), 1):
+                st.markdown(f"**Question {number}**")
+                st.write(problem["content"])
+                st.text(answers.get(problem["problem_id"], ""))
+                show_problem_result(row, problem["problem_id"])
+            try:
+                grading_action(row, professor_id)
+            except (ValueError, RuntimeError, PyMongoError):
+                st.error("Could not grade this saved submission. Please try again.")
 
 
 def show_assignment_editor(assignment_id, professor_id: str):
@@ -204,4 +216,4 @@ def show_assignment_editor(assignment_id, professor_id: str):
             st.error(str(error))
 
     st.divider()
-    _render_submissions(assignment_id)
+    _render_submissions(assignment_id, professor_id)

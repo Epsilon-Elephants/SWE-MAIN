@@ -160,8 +160,9 @@ def test_editor_lists_submissions():
         "problems": [{"problem_id": "first", "content": "Solve this"}],
     }
     rows = [{
-        "_id": ObjectId(), "attempts": 2, "best_score": 9.0, "latest_score": 7.0,
-        "last_completed": datetime(2026, 11, 5, 14, 30),
+        "_id": ObjectId(), "grading_status": "graded",
+        "grading_result": {"total_points": 7.0, "max_points": 10.0, "percentage": 70.0, "problems": []},
+        "submitted_at": datetime(2026, 11, 5, 14, 30),
         "user": {"first_name": "Grace", "last_name": "Hopper", "email": "grace@example.com"},
     }]
     with patch("pages.assignment_editor.get_assignment", return_value=assignment), patch(
@@ -171,8 +172,8 @@ def test_editor_lists_submissions():
     assert not app.exception
     table = app.dataframe[0].value
     assert list(table["Student"]) == ["Grace Hopper"]
-    assert list(table["Best score"]) == [9.0]
-    assert list(table["Attempts"]) == [2]
+    assert list(table["Grade"]) == ["AI score: 7/10 points · 70%"]
+    assert list(table["Submitted"]) == ["Nov 05, 2026 14:30 UTC"]
 
 
 def roster_app():

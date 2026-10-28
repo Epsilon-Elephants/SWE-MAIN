@@ -2,13 +2,13 @@
 
 Streamlit application for professor-managed classes, short-answer homework, and
 the Rocky AI assistant. Students can submit homework and review their attempts.
-Homework is saved as **ungraded**; automatic grading is not connected yet.
+Homework answers are saved first, then Rocky grades each problem against the professor’s reference answer and optional rubric. Students and professors can review scores and feedback; failed grading can be retried.
 
 ## Documentation
 
 - [Local setup and development](docs/development.md): configuration, running the app, tests, and common setup issues.
 - [How the application works](docs/architecture.md): navigation, responsibilities, collections, and access rules.
-- [Problem format and AI integration](docs/ai-grading.md): problem fields, a complete grading-input example, the Rocky client, and work remaining for grading.
+- [Problem format and AI integration](docs/ai-grading.md): problem fields, grading input/output, automatic scores, retries, and database setup.
 - [Assignments and submissions](docs/assignments.md): dates, authoring helpers, submission history, and database validation.
 - [Problem JSON Schema](docs/homework-problem.schema.json): the canonical v1 problem document.
 
@@ -67,7 +67,7 @@ current implementation and do not imply that a bug was previously reported.
 | Rate limiting | Exact attempt limit, UTC window rollover, retry rounding, custom windows, and atomic counter query. |
 | Assignments and problems | Required fields, dates, drafts/publication, ownership filters, stable problem IDs, edits/deletion, schema validation, and grading-input snapshots. |
 | Classes and grades | Professor ownership, enrollment, grade validation, literal searches, pagination, and class-scoped roster queries. |
-| Homework | Student access, answer validation, ungraded submission history, and private instructor fields staying out of student pages. |
+| Homework | Student access, answer validation, automatic problem grades, retries, saved history, and private instructor fields staying out of student pages. |
 | Rocky and pages | Mocked HTTP/stream handling, topic analysis, and existing dashboard/settings/navigation regressions through AppTest. |
 
 Generate the same reports as CI:

@@ -112,10 +112,15 @@ does not verify live database configuration or Rocky availability.
 | No professor dashboard | Public signup always creates students; check the provisioned role and sign in again after changing it. |
 | Professor cannot use a class | Check that `classes.instructor_id` is the professor's BSON ObjectId. |
 | Student has no homework | Check enrollment, assignment status, and posted date. Date-only inputs become midnight UTC. |
-| Rocky unavailable | Check `ROCKY_KEY`, endpoint connectivity, and server logs. Homework submission itself does not call Rocky. |
+| Rocky unavailable | Check `ROCKY_KEY`, endpoint connectivity, and server logs. Answers save first; grading failures leave a retryable attempt. Check professor reference answers and the submission validator as well. |
 | Tests attempt to connect to MongoDB | Mock the relevant database helper; the test fixture intentionally rejects live connections. |
 | Tests attempt a live HTTP request | Mock the HTTP call (for example, Rocky's `requests.get`/`requests.post`); the shared fixture intentionally blocks real requests. |
 
 For changes to the grading contract, update [the AI guide](ai-grading.md),
 [problem JSON Schema](homework-problem.schema.json), and normalization/tests
 together. Keep implemented behavior distinct from planned grading features.
+
+For issue #61 grading, run `python -m pytest tests/test_grading.py` and
+`node tests/test_grading_migration.js`. The latter checks the validator upgrade
+without MongoDB. Apply `docs/assignment-validation.js` to databases that still
+enforce the old ungraded-only status enum before deploying the new grader.

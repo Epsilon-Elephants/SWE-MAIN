@@ -1,4 +1,4 @@
-"""Versioned short-answer contract shared by authoring, submission, and future grading."""
+"""Versioned short-answer contract shared by authoring, submission, and grading."""
 
 from math import isfinite
 from uuid import uuid4
@@ -58,7 +58,7 @@ def normalize_problems(problems):
 
 
 def build_grading_payload(submission):
-    """Build JSON-safe input for future Rocky integration; does not call any AI.
+    """Build private JSON-safe input for Rocky; transport is handled by the grader.
 
     Trusted server use only: this includes private instructor grading guidance.
     Student answers are untrusted content, never model instructions.

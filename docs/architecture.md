@@ -15,12 +15,12 @@ Python helpers directly.
 | [`app/pages/assignment_editor.py`](../app/pages/assignment_editor.py) | Professor edits to assignment details and questions. |
 | [`app/components/problem_editor.py`](../app/components/problem_editor.py) | Prompt editor and instructor grading fields; no database access. |
 | [`app/homework/views.py`](../app/homework/views.py) | Student homework list, answer form, and saved-attempt display. |
-| [`app/homework/schema.py`](../app/homework/schema.py) | Canonical problem normalization and future AI grading-input builder. |
+| [`app/homework/schema.py`](../app/homework/schema.py) | Canonical problem normalization and private AI grading-input builder. |
 | [`app/db/DataBase.py`](../app/db/DataBase.py) | Shared lazy MongoDB connection, CRUD, class queries, and enrollment checks. |
 | [`app/db/assignments.py`](../app/db/assignments.py) | Assignment ownership, scheduling, visibility, and problem edits. |
-| [`app/db/homework_submissions.py`](../app/db/homework_submissions.py) | Authorized homework reads and new ungraded submission records. |
+| [`app/db/homework_submissions.py`](../app/db/homework_submissions.py) | Authorized homework reads, saved attempts, and professor submission queries. |
 | [`app/db/completed_assignments.py`](../app/db/completed_assignments.py) | Trusted scored completion history, separate from submissions. |
-| [`app/rocky/`](../app/rocky) | AI transport and a standalone topic-performance analyzer. |
+| [`app/rocky/`](../app/rocky) | AI transport, grading contract, performance analysis, and recommendation backend. |
 
 ## User workflow and state
 
@@ -47,11 +47,16 @@ Professor saves assignment and problems
   → enrolled student opens posted homework
   → student submits a complete problem-ID-to-answer mapping
   → server validates access and saves answers + assignment snapshot
-  → student sees saved attempt, awaiting grading
+  → server claims the attempt and Rocky compares answers with professor references
+  → server validates every problem score and saves points, feedback, and percentage
+  → student and professor see the saved AI result (or a retryable grading state)
 ```
 
-AI grading and score persistence are future steps. The student Rocky dialog is
-a separate question-and-answer interaction.
+`app/homework/grading.py` manages authorization, leases, and conditional result
+writes; `app/rocky/grading.py` owns the model prompt and output validation.
+Answers are saved before the model call. Missing references block grading;
+service/validation failures preserve answers without assigning a zero. The
+student Rocky dialog remains a separate question-and-answer interaction.
 
 Each professor class has one **Open roster** button. Its dialog shows a searchable,
 paginated roster with class grades, grade editing, and confirmed student removal;
@@ -68,7 +73,7 @@ current professor. Manual grades update the enrollment's `grade.earned` and
 | `classes` | Class records; `instructor_id` references the professor's user ObjectId. |
 | `students` | Enrollment rows linking `user_id` and `class_id`; new enrollments initialize `grade: {earned: 0.0, possible: 0.0}`. |
 | `assignments` | Title, description, status, UTC dates, `class_id`, `professor_id`, and embedded `problems`. |
-| `homework_submissions` | A new ungraded record for each submit, including answers and the assignment snapshot. |
+| `homework_submissions` | A separate attempt per submit, with immutable answers/snapshot, grading state, and validated problem scores/feedback. |
 | `completed_assignments` | Separate scored attempts with `assignment_id`, `user_id`, total `score`, and `completed_at`. |
 | `rate_limits` | Fixed-window login counters identified by action, normalized email, and window start. |
 
@@ -97,9 +102,10 @@ points denominator are excluded.
 analytics, validates Rocky's topic/reason fields, and falls back to known weak
 topics when the response is unusable. Empty histories return insufficient data
 without calling Rocky. Convenience calls own their engine/client, and reused
-engines serialize the complete payload transaction. The pipeline is not yet
-wired to the ungraded homework submission flow or dashboard UI; callers must
-enforce the access rules below before requesting database-backed reports.
+engines serialize the complete payload transaction. The adapters also read actual problem scores from graded homework, preserving
+partial credit and snapshot topics. Homework grading is wired to submit/retry and
+the student/professor views. Recommendation widgets are not yet in the dashboard;
+callers must enforce the access rules below before requesting database reports.
 
 ## Access and scheduling rules
 

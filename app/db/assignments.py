@@ -115,7 +115,7 @@ def get_assignment(assignment_id):
     if not assignment_id:
         raise ValueError("Assignment ID is required.")
 
-    return db.read_one("assignments", {"_id": assignment_id})
+    return db.read_one("assignments", {"_id": db._object_id(assignment_id, "assignment ID")})
 
 
 # Return all assignments created by one professor

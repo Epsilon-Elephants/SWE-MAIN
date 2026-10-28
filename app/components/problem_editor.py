@@ -31,11 +31,11 @@ def grading_fields(content: str, problem=None):
     topic = st.text_input("Topic", value=problem.get("topic", ""))
     reference_answer = st.text_area(
         "Reference answer (private)", value=problem.get("reference_answer", ""),
-        help="Optional model answer for future grading. Students cannot see this field.",
+        help="Required for Rocky grading. Students cannot see this field.",
     )
     grading_guidance = st.text_area(
         "Grading guidance (private)", value=problem.get("grading_guidance", ""),
-        help="Optional criteria and partial-credit guidance for future grading.",
+        help="Optional criteria and partial-credit guidance for Rocky grading.",
     )
     return {
         "content": content, "points": points, "topic": topic,

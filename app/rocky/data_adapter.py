@@ -256,6 +256,43 @@ def build_attempts_and_questions_from_completions(
     return attempts, list(questions_dict.values())
 
 
+def build_performance_from_graded_submissions(submissions):
+    """Use actual problem scores and snapshot topics from graded homework."""
+    from app.rocky.grading import InvalidGrade, validate_grading_response
+    from homework.schema import normalize_problems
+    import json
+
+    attempts, questions = [], []
+    for submission in submissions:
+        if submission.get("grading_status") != "graded":
+            continue
+        try:
+            problems = normalize_problems(submission["assignment_snapshot"]["problems"])
+            result = submission["grading_result"]
+            # Revalidate stored data before it becomes recommendation evidence.
+            validated = validate_grading_response(json.dumps({
+                "schema_version": result["schema_version"],
+                "results": result["problems"],
+            }), problems)
+            grades = {row["problem_id"]: row for row in validated["problems"]}
+        except (InvalidGrade, KeyError, ValueError, TypeError):
+            continue
+        for problem in problems:
+            grade = grades[problem["problem_id"]]
+            identifier = f"submission:{submission['_id']}:{problem['problem_id']}"
+            questions.append({
+                "_id": identifier, "assignment_id": str(submission["assignment_id"]),
+                "topic": infer_topic_from_text(content=problem["content"], explicit_topic=problem["topic"]),
+            })
+            attempts.append({
+                "_id": identifier, "student_id": str(submission["user_id"]),
+                "question_id": identifier,
+                "accuracy": grade["points_awarded"] / grade["max_points"],
+                "timestamp": result.get("graded_at", submission.get("submitted_at")),
+            })
+    return attempts, questions
+
+
 def get_student_performance_from_db(
     user_id: str | ObjectId,
     db_instance=None,
@@ -269,14 +306,15 @@ def get_student_performance_from_db(
 
     user_obj_id = db_instance._object_id(user_id, "user ID")
     completions = list(db_instance.find("completed_assignments", {"user_id": user_obj_id}))
-    if not completions:
-        return [], []
-
     assignment_ids = list({c["assignment_id"] for c in completions if "assignment_id" in c})
-    assignments = list(db_instance.find("assignments", {"_id": {"$in": assignment_ids}}))
+    assignments = list(db_instance.find("assignments", {"_id": {"$in": assignment_ids}})) if assignment_ids else []
     assignments_map = {str(a["_id"]): a for a in assignments}
 
-    return build_attempts_and_questions_from_completions(completions, assignments_map)
+    attempts, questions = build_attempts_and_questions_from_completions(completions, assignments_map)
+    scored_attempts, scored_questions = build_performance_from_graded_submissions(
+        db_instance.find("homework_submissions", {"user_id": user_obj_id, "grading_status": "graded"}),
+    )
+    return attempts + scored_attempts, questions + scored_questions
 
 
 def get_class_performance_from_db(
@@ -292,15 +330,16 @@ def get_class_performance_from_db(
 
     class_obj_id = db_instance._object_id(class_id, "class ID")
     assignments = list(db_instance.find("assignments", {"class_id": class_obj_id}))
-    if not assignments:
-        return [], []
-
     assignments_map = {str(a["_id"]): a for a in assignments}
     assignment_ids = list(assignments_map.keys())
 
     # Find all completions across all students for these assignments
     obj_ids = [db_instance._object_id(aid, "assignment ID") for aid in assignment_ids]
-    completions = list(db_instance.find("completed_assignments", {"assignment_id": {"$in": obj_ids}}))
+    completions = list(db_instance.find("completed_assignments", {"assignment_id": {"$in": obj_ids}})) if obj_ids else []
 
-    return build_attempts_and_questions_from_completions(completions, assignments_map)
+    attempts, questions = build_attempts_and_questions_from_completions(completions, assignments_map)
+    scored_attempts, scored_questions = build_performance_from_graded_submissions(
+        db_instance.find("homework_submissions", {"class_id": class_obj_id, "grading_status": "graded"}),
+    )
+    return attempts + scored_attempts, questions + scored_questions
 
