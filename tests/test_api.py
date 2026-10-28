@@ -4,7 +4,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 import requests
 
-from app.rocky.rocky import rocky
+from rocky.rocky import rocky
 
 
 @pytest.mark.parametrize("status", [200, 401, 403])
@@ -13,7 +13,7 @@ def test_rocky_models_endpoint(status):
     response.json.return_value = {"data": [{"id": "test-model"}]}
     if status != 200:
         response.raise_for_status.side_effect = requests.HTTPError(str(status))
-    with patch("app.rocky.rocky.requests.get", return_value=response) as get:
+    with patch("rocky.rocky.requests.get", return_value=response) as get:
         if status == 200:
             assert rocky().model == "test-model"
         else:
@@ -53,7 +53,7 @@ def test_rocky_responses_endpoint_auth(status):
     response.json.return_value = {"output_text": "Practice truth tables."}
     if status != 200:
         response.raise_for_status.side_effect = requests.HTTPError(str(status))
-    with patch("app.rocky.rocky.requests.post", return_value=response) as post:
+    with patch("rocky.rocky.requests.post", return_value=response) as post:
         if status == 200:
             assert client.send_payload() == "Practice truth tables."
         else:

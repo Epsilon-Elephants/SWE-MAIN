@@ -15,7 +15,7 @@ from db.DataBase import db
 from db.homework_submissions import list_submissions_for_assignment, submit_homework
 from homework.grading import grade_submission
 from homework.schema import normalize_problems
-from app.rocky.grading import InvalidGrade, build_grading_prompt, validate_grading_response
+from rocky.grading import InvalidGrade, build_grading_prompt, validate_grading_response
 
 pytestmark = [pytest.mark.unit, pytest.mark.regression]
 NOW = datetime(2026, 10, 28, 18, tzinfo=timezone.utc)
@@ -285,8 +285,8 @@ def test_student_submit_displays_saved_problem_grades_and_does_not_grade_on_reru
 
 
 def test_new_grades_feed_student_and_class_recommendations(memory):
-    from app.rocky.data_adapter import get_student_performance_from_db, get_class_performance_from_db
-    from app.rocky.analyzer import analyze_student_weaknesses
+    from rocky.data_adapter import get_student_performance_from_db, get_class_performance_from_db
+    from rocky.analyzer import analyze_student_weaknesses
     memory.collections["assignments"][0]["problems"][0]["topic"] = "Conjunction"
     memory.collections["assignments"][0]["problems"][1]["topic"] = "Disjunction"
     sid = memory.submit()

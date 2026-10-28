@@ -3,7 +3,7 @@
 Run without Python's -O option so assertions execute:
     python tests/test_prompts.py
 """
-from app.rocky.prompts import (
+from rocky.prompts import (
     build_student_recommendation_prompt,
     build_professor_recommendation_prompt,
 )

@@ -258,7 +258,7 @@ def build_attempts_and_questions_from_completions(
 
 def build_performance_from_graded_submissions(submissions):
     """Use actual problem scores and snapshot topics from graded homework."""
-    from app.rocky.grading import InvalidGrade, validate_grading_response
+    from .grading import InvalidGrade, validate_grading_response
     from homework.schema import normalize_problems
     import json
 

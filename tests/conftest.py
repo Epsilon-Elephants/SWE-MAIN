@@ -3,10 +3,10 @@
 import sys
 from pathlib import Path
 
-import app  # Resolve the root package before exposing app's legacy absolute imports.
 import pytest
 
-sys.path.append(str(Path(__file__).resolve().parents[1] / "app"))
+# Match Streamlit: the entrypoint directory comes before the repository root.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "app"))
 
 
 @pytest.fixture(autouse=True)

@@ -10,7 +10,7 @@ from bson import ObjectId
 
 pytestmark = [pytest.mark.unit, pytest.mark.regression]
 
-from app.rocky.analyzer import (
+from rocky.analyzer import (
     analyze_student_weaknesses,
     analyze_class_weaknesses,
     filter_weak_topics,

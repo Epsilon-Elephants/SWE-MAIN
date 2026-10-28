@@ -10,7 +10,7 @@ from threading import Event
 import pytest
 from datetime import datetime
 
-from app.rocky.recommendation import (
+from rocky.recommendation import (
     RecommendationEngine,
     extract_json_from_llm_output,
     get_student_recommendations,
@@ -219,7 +219,7 @@ def test_default_calls_own_clients(monkeypatch):
         client = MockRockyClient("invalid response")
         clients.append(client)
         return client
-    monkeypatch.setattr("app.rocky.rocky.rocky", factory)
+    monkeypatch.setattr("rocky.rocky.rocky", factory)
     get_student_recommendations(SAMPLE_ATTEMPTS, SAMPLE_QUESTIONS)
     get_class_recommendations(SAMPLE_ATTEMPTS, SAMPLE_QUESTIONS)
     assert len(clients) == 2
@@ -265,7 +265,7 @@ def test_concurrent_student_and_class_requests_do_not_mix_payloads():
 
 
 def test_fractional_assignment_score_drives_configured_recommendations():
-    from app.rocky.data_adapter import build_attempts_and_questions_from_completions
+    from rocky.data_adapter import build_attempts_and_questions_from_completions
     attempts, questions = build_attempts_and_questions_from_completions(
         [{"assignment_id": "a1", "score": 3}],
         {"a1": {"problems": [{"content": "Truth tables", "points": 4}]}},

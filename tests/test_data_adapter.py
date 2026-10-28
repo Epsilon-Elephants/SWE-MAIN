@@ -8,9 +8,9 @@ from datetime import datetime
 import pytest
 from bson import ObjectId
 
-from app.rocky.analyzer import analyze_student_weaknesses, analyze_class_weaknesses
+from rocky.analyzer import analyze_student_weaknesses, analyze_class_weaknesses
 
-from app.rocky.data_adapter import (
+from rocky.data_adapter import (
     infer_topic_from_text,
     normalize_score_ratio,
     build_attempts_and_questions_from_completions,

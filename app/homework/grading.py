@@ -9,7 +9,7 @@ from bson import ObjectId
 
 from db.DataBase import db
 from homework.schema import build_grading_payload, normalize_problems
-from app.rocky.grading import InvalidGrade, grade_with_rocky
+from rocky.grading import InvalidGrade, grade_with_rocky
 
 logger = logging.getLogger(__name__)
 LEASE_DURATION = timedelta(minutes=10)

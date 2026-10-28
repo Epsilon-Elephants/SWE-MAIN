@@ -2,7 +2,6 @@ import sys
 import unittest
 from pathlib import Path
 
-import app
 import pytest
 
 sys.path.append(str(Path(__file__).resolve().parents[1] / "app"))

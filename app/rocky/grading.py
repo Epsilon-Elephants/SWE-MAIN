@@ -4,7 +4,7 @@ import json
 import math
 from decimal import Decimal
 
-from app.rocky.recommendation import extract_json_from_llm_output
+from .recommendation import extract_json_from_llm_output
 
 GRADING_VERSION = 1
 GRADING_INSTRUCTIONS = """You are Rocky, grading short-answer coursework against the professor's reference answers.
@@ -81,7 +81,7 @@ def grade_with_rocky(payload, *, rocky_client=None):
     """Use a fresh client per grading request; never reuse dashboard chat state."""
     if rocky_client is None:
         from dotenv import load_dotenv
-        from app.rocky.rocky import rocky
+        from .rocky import rocky
 
         load_dotenv()
         rocky_client = rocky()

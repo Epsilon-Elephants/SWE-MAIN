@@ -5,16 +5,16 @@ from threading import Lock
 from typing import List, Dict, Any, Optional
 from bson import ObjectId
 
-from app.rocky.analyzer import (
+from .analyzer import (
     analyze_student_weaknesses,
     analyze_class_weaknesses,
     filter_weak_topics,
 )
-from app.rocky.prompts import (
+from .prompts import (
     build_student_recommendation_prompt,
     build_professor_recommendation_prompt,
 )
-from app.rocky.schemas import (
+from .schemas import (
     TopicRecommendation,
     RecommendationReport,
     validate_recommendation_item,
@@ -81,7 +81,7 @@ class RecommendationEngine:
         if self.rocky_client is not None:
             return self.rocky_client
         try:
-            from app.rocky.rocky import rocky
+            from .rocky import rocky
             self.rocky_client = rocky()
             return self.rocky_client
         except Exception as e:
@@ -155,7 +155,7 @@ class RecommendationEngine:
         Fetches student completion data from MongoDB, converts it via data_adapter,
         and generates recommendations.
         """
-        from app.rocky.data_adapter import get_student_performance_from_db
+        from .data_adapter import get_student_performance_from_db
         attempts, questions = get_student_performance_from_db(user_id, db_instance=db_instance)
         return self.get_student_recommendations(
             attempts=attempts,
@@ -218,7 +218,7 @@ class RecommendationEngine:
         Fetches class completion data from MongoDB, converts it via data_adapter,
         and generates class-wide review recommendations.
         """
-        from app.rocky.data_adapter import get_class_performance_from_db
+        from .data_adapter import get_class_performance_from_db
         attempts, questions = get_class_performance_from_db(class_id, db_instance=db_instance)
         return self.get_class_recommendations(
             all_attempts=attempts,
