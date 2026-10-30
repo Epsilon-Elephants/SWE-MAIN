@@ -4,37 +4,35 @@ from contextlib import closing
 import streamlit as st
 
 from pages.dashboards.dashboard import Dashboard
-from pages.dashboards.student import homework, assignments, practice
-from pages.dashboards.student.common import get_view, open_view
+from pages.dashboards.student import assignments, practice
+from pages.dashboards.student.common import get_view, open_view, open_item
+from pages.dashboards.student.recently_visited import get_recent
 from rocky.rocky import rocky
 from dotenv import load_dotenv
 from pathlib import Path
 import base64
 import logging
 import requests
-import streamlit.components.v1 as components
+import html
 from ddgs import DDGS
 
 
 views  = {
-    "homework": homework.render,
     "assignments": assignments.render,
-    "practice": practice.render
+    "practice":    practice.render,
 }
 
 
-# placeholder until real data is added
-recently_visited = [
-    "Models",
-    "First Order Logic",
-    "Propositional Logic",
-    "Logic Resources",
-    "Truth Tables",
-    "Proof Techniques",
-]
-
 # labels under the search bar
 option = ["Homework", "Assignments", "Practice"]
+
+def open_homework(item_id):
+    st.session_state["homework_assignment_id"] = item_id
+    st.switch_page("pages/homework_assignment.py")
+
+RECENT_KINDS = {
+    "homework": {"label": "Homework", "open": open_homework},
+}
 
 
 # path for Rocky icon image
@@ -69,30 +67,6 @@ def rocky_css() -> str:
 }}
 .st-key-student_rocky_button button p {{ font-size: 0 !important; }}
 </style>
-"""
-
-# script for when the mouse is hovering over "Recently visited" to move it left and right
-wheel_script = """
-<script>
-(function() {
-    const doc = window.parent.document;
-    function attach() {
-    const scroller = doc.querySelector('.recent-scroller');
-    if (!scroller || scroller.dataset.wheelReady) return;
-    scroller.dataset.wheelReady = '1';
-    scroller.addEventListener('wheel', function(e) {
-     if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;
-     const max = scroller.scrollWidth - scroller.clientWidth;
-     const right = e.deltaY > 0;
-     if ((right && scroller.scrollLeft >= max - 1) || (!right && scroller.scrollLeft <= 0)) return;
-     e.preventDefault();
-     scroller.scrollLeft += e.deltaY;
-     }, { passive: false });
-    }
-    attach()
-    new MutationObserver(attach).observe(doc.body, { childList: true, subtree: true});
-})();
-</script>
 """
 
 # Creates one Rocky AI per login session
@@ -215,27 +189,32 @@ class studentDash(Dashboard):
                     except Exception:
                         st.error("Search is temporarily unavailable.")
 
-# the "Recently visited" sesction with placeholder cards that scroll sideways
+# the "Recently visited" section
     def render_recently_visited(self):
         st.markdown(
             '<div class="section-title">Recently visited</div>',
-            unsafe_allow_html=True,)
-
-# builds placeholder cards for each item in the list box with title
-        cards ="".join(
-            f'<div class="card"><div class="thumb"></div>'
-            f'<div class="title">{title}</div></div>'
-            for title in recently_visited
-        )
-
-# puts all the cards in a scrolling row
-        st.markdown(
-            f'<div class="recent-scroller">{cards}</div>',
             unsafe_allow_html=True,
         )
-
-# loads the wheel scroll script
-        components.html(wheel_script, height=0)
+        items = [i for i in get_recent() if i["kind"] in RECENT_KINDS]
+        if not items:
+            st.caption("Nothing here yet.Open an assignment!")
+            return
+        with st.container(key="recent_scroller"):
+            for item in items:
+                kind = RECENT_KINDS[item["kind"]]
+                with st.container(key=f"recentcard_{item['kind']}_{item['item_id']}"):
+                    st.markdown(
+                        f'<div class="rv-card">'
+                        f'<div class="rv-thumb"><span>{html.escape(item["title"])}<span></div>'
+                        f'<div class="rv-title">{html.escape(kind["label"])}</div>'
+                        f'</div>',
+                        unsafe_allow_html=True,
+                    )
+                    if st.button(
+                        item["title"],
+                        key=f"recentbtn_{item['kind']}_{item['item_id']}",
+                    ):
+                        kind["open"](item["item_id"])
 
 # loads rocky button in botttom right corner
     def render_rocky_button(self):

@@ -15,6 +15,8 @@ from homework.schema import normalize_problems
 from homework.grading import grade_submission
 from homework.results import grading_action, grading_label, show_problem_result
 
+from pages.dashboards.student.recently_visited import record_visit
+
 
 ERRORS = (ValueError, RuntimeError, PyMongoError)
 
@@ -95,6 +97,7 @@ def show_homework_assignment():
         return
     try:
         assignment = get_homework_for_student(assignment_id, user["id"])
+        record_visit("homework", assignment_id, assignment["title"])
         classroom = db.read_one("classes", {"_id": assignment["class_id"]}) or {}
         history = list_submissions_for_student(user["id"], assignment_id)
         st.title(assignment["title"])
