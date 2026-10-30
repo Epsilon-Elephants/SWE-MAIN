@@ -242,6 +242,11 @@ class DataBase:
         collection = self._get_collection(collection_name)
         return collection.update_one(query, {"$set": fields})
 
+    # UPSERT: set fields on a maching document, creating it if missing.
+    def upsert_one(self,collection_name: str, query: dict, fields: dict):
+        collection = self._get_collection(collection_name)
+        return collection.update_one(query, {"$set": fields}, upsert=True)
+    
     # DELETE: delete a single matching document.
     def delete_one(self, collection_name: str, query: dict):
         collection = self._get_collection(collection_name)
