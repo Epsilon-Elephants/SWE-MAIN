@@ -60,6 +60,7 @@ class MemoryDB:
                 ]),
             }],
             "homework_submissions": [],
+            "recent_visits": [],
         }
 
     @classmethod
@@ -100,6 +101,14 @@ class MemoryDB:
                 return SimpleNamespace(matched_count=1)
         return SimpleNamespace(matched_count=0)
 
+    def upsert_one(self, name, query, fields):
+        result = self.update_one(name, query, fields)
+        if result.matched_count == 0:
+            doc = {**copy.deepcopy(query), **copy.deepcopy(fields)}
+            doc["_id"] = ObjectId()
+            self.collections.setdefault(name, []).append(doc)
+            return result
+        
     def submit(self):
         return submit_homework(self.assignment_id, self.student, {"first": "Both true.", "second": "One true."})
 
@@ -107,7 +116,7 @@ class MemoryDB:
 @pytest.fixture
 def memory(monkeypatch):
     store = MemoryDB()
-    for name in ("read_one", "find", "insert_one", "update_one"):
+    for name in ("read_one", "find", "insert_one", "update_one", "upsert_one"):
         monkeypatch.setattr(db, name, getattr(store, name))
     return store
 
