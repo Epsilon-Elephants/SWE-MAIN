@@ -92,7 +92,7 @@ def _render_submissions(assignment_id, professor_id):
 def show_assignment_editor(assignment_id, professor_id: str):
     if st.button("Back to assignments", key="back_to_assignments"):
         st.session_state.pop("selected_assignment_id", None)
-        st.switch_page("pages/home.py")
+        st.switch_page("app_pages/overview.py")
 
     try:
         assignment = get_assignment(assignment_id)
@@ -160,7 +160,7 @@ def show_assignment_editor(assignment_id, professor_id: str):
                 )
                 if finish_later:
                     st.session_state.pop("selected_assignment_id", None)
-                    st.switch_page("pages/home.py")
+                    st.switch_page("app_pages/overview.py")
                 st.rerun()
             except (ValueError, RuntimeError, PyMongoError) as error:
                 _show_error(error)
@@ -184,7 +184,7 @@ def show_assignment_editor(assignment_id, professor_id: str):
             try:
                 if delete_assignment(assignment_id, professor_id):
                     st.session_state.pop("selected_assignment_id", None)
-                    st.switch_page("pages/home.py")
+                    st.switch_page("app_pages/overview.py")
             except (ValueError, RuntimeError, PyMongoError) as error:
                 _show_error(error)
 

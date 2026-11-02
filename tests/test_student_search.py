@@ -26,7 +26,7 @@ def test_search_renders_results_without_losing_navigation(student_app):
         student_app.run()
         assert not student_app.exception
         search.assert_not_called()
-        student_app.text_input(key="student_search_query").set_value("logic").run()
+        student_app.text_input(key="student_search_query").set_value("logic")
         search.assert_not_called()
         next(b for b in student_app.button if b.label == "Search resources").click().run()
         assert not student_app.exception
@@ -43,7 +43,7 @@ def test_search_handles_empty_results_and_service_errors(student_app, failure):
         if failure:
             search.return_value.text.side_effect = RuntimeError("Search provider unavailable")
         student_app.run()
-        student_app.text_input(key="student_search_query").set_value("logic").run()
+        student_app.text_input(key="student_search_query").set_value("logic")
         next(b for b in student_app.button if b.label == "Search resources").click().run()
     assert not student_app.exception
     if failure:

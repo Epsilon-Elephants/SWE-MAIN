@@ -10,8 +10,8 @@ Python helpers directly.
 | --- | --- |
 | [`app/app.py`](../app/app.py) | Entry point, initial user state, shared styling, and role-scoped navigation. |
 | [`.streamlit/config.toml`](../.streamlit/config.toml) | Academic theme, built-in fonts, and sidebar palette. |
-| [`app/app_pages/`](../app/app_pages/) | Dedicated professor creation/editing, classes, practice status, and account routes. |
-| [`app/pages/home.py`](../app/pages/home.py), [`welcome.py`](../app/pages/welcome.py) | Show login or dispatch to the student's/professor's dashboard. |
+| [`app/app_pages/`](../app/app_pages/) | Overview, homework, professor creation/editing, classes, practice status, and account routes. |
+| [`app/app_pages/overview.py`](../app/app_pages/overview.py), [`welcome.py`](../app/pages/welcome.py) | Show login or dispatch to the student's/professor's dashboard. |
 | [`app/auth/`](../app/auth) | Registration, password verification, and login rate limiting. |
 | [`app/pages/dashboards/`](../app/pages/dashboards) | Role-specific dashboard views, professor class management, and student Rocky dialog. |
 | [`app/pages/assignment_editor.py`](../app/pages/assignment_editor.py) | Professor edits to assignment details and questions. |
@@ -35,8 +35,8 @@ Registration creates a `student` account. Login returns a session user containin
 Professors have separate classes, creation, and editing pages; students have
 separate homework-list, assignment-taking, and practice-status pages. Both roles
 have an account page. Contextual editing/taking routes are hidden from the menu
-but registered for `st.switch_page`. New routes live in `app/app_pages/`; existing
-student homework routes keep their paths. A file in `app/pages/` does not
+but registered for `st.switch_page`. All route entry scripts live in
+`app/app_pages/`, separate from the helpers in `app/pages/`. A file in `app/pages/` does not
 automatically become navigable because the entry point explicitly configures
 navigation. Selection IDs remain in session state; refreshing in a new session
 does not restore a selected assignment.

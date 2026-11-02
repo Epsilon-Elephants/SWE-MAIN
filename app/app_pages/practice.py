@@ -8,4 +8,4 @@ st.title("Practice")
 st.info("Personalized practice is not available yet. It will use missed homework questions once grading is connected.")
 st.caption("You can ask Rocky to explain a concept from your overview.")
 if st.button("Back to overview", key="student_back_button", icon=":material/arrow_back:"):
-    st.switch_page("pages/home.py")
+    st.switch_page("app_pages/overview.py")

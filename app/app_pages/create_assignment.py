@@ -8,5 +8,5 @@ st.caption("COURSEWORK / AUTHORING")
 st.title("Create assignment")
 st.caption("Start with a question, then add problems and private grading criteria in the editor.")
 if st.button("Back to overview", icon=":material/arrow_back:"):
-    st.switch_page("pages/home.py")
+    st.switch_page("app_pages/overview.py")
 render_create_assignment(user["id"])

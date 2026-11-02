@@ -14,7 +14,7 @@ with st.sidebar:
         st.badge(role.capitalize() if role else "Account", icon=":material/person:")
 
 # Explicit role-scoped routes also prevent legacy pages/ auto-discovery.
-pages = [st.Page("pages/home.py", title="Overview", icon=":material/dashboard:", default=True)]
+pages = [st.Page("app_pages/overview.py", title="Overview", icon=":material/dashboard:", default=True)]
 if role == "professor":
     pages.extend([
         st.Page("app_pages/classes.py", title="Classes", icon=":material/groups:"),
@@ -23,8 +23,8 @@ if role == "professor":
     ])
 if role == "student":
     pages.extend([
-        st.Page("pages/homework.py", title="Homework", icon=":material/assignment:"),
-        st.Page("pages/homework_assignment.py", title="Take assignment", icon=":material/edit_note:", visibility="hidden"),
+        st.Page("app_pages/homework.py", title="Homework", icon=":material/assignment:"),
+        st.Page("app_pages/homework_assignment.py", title="Take assignment", icon=":material/edit_note:", visibility="hidden"),
         st.Page("app_pages/practice.py", title="Practice", icon=":material/psychology:"),
     ])
 if role in {"student", "professor"}:

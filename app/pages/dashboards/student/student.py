@@ -17,7 +17,7 @@ from rocky.rocky import rocky
 
 def open_homework(item_id):
     st.session_state["homework_assignment_id"] = item_id
-    st.switch_page("pages/homework_assignment.py")
+    st.switch_page("app_pages/homework_assignment.py")
 
 # Creates one Rocky AI per login session
 def get_rocky():
@@ -113,7 +113,7 @@ class studentDash(Dashboard):
                     st.info("You have no unsubmitted coursework right now.")
         with st.container(horizontal=True):
             if st.button("Homework", key="student_filter_Homework", icon=":material/assignment:", type="primary"):
-                st.switch_page("pages/homework.py")
+                st.switch_page("app_pages/homework.py")
             if st.button("Practice", key="student_filter_Practice", icon=":material/psychology:"):
                 st.switch_page("app_pages/practice.py")
             if st.button("Ask Rocky", key="student_rocky_button", icon=":material/chat:"):

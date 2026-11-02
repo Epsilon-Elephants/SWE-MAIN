@@ -54,7 +54,7 @@ def show_details(assignment, class_name):
 def show_homework_list():
     user = student_user()
     if st.button("Back to dashboard", icon=":material/arrow_back:"):
-        st.switch_page("pages/home.py")
+        st.switch_page("app_pages/overview.py")
     st.title("Homework")
     st.caption("Open your homework to answer questions and submit your work.")
     try:
@@ -78,7 +78,7 @@ def show_homework_list():
                     st.caption("Not submitted")
                 if st.button("Open homework", key=f"homework_open_{assignment['_id']}", icon=":material/assignment:"):
                     st.session_state.homework_assignment_id = str(assignment["_id"])
-                    st.switch_page("pages/homework_assignment.py")
+                    st.switch_page("app_pages/homework_assignment.py")
     except ERRORS as error:
         if isinstance(error, ValueError):
             st.error(str(error))
@@ -90,7 +90,7 @@ def show_homework_list():
 def show_homework_assignment():
     user = student_user()
     if st.button("Back to homework", icon=":material/arrow_back:"):
-        st.switch_page("pages/homework.py")
+        st.switch_page("app_pages/homework.py")
     assignment_id = st.session_state.get("homework_assignment_id")
     if not assignment_id:
         st.info("Select an assignment from Homework first.")

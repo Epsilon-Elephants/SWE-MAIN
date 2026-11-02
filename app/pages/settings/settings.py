@@ -9,7 +9,7 @@ def open_settings(return_page=None):
 
 
 def _return_from_settings():
-    st.switch_page("pages/home.py")
+    st.switch_page("app_pages/overview.py")
 
 
 def _logout():

@@ -12,4 +12,4 @@ if assignment_id:
 else:
     st.info("Open an assignment from Overview to edit its details and questions.")
     if st.button("Go to overview"):
-        st.switch_page("pages/home.py")
+        st.switch_page("app_pages/overview.py")

@@ -171,11 +171,11 @@ def test_student_flow_from_dashboard_to_submission(homework):
         assert app.title[0].value == "Homework"
         assert any("Logic class" in c.value for c in app.caption)
         # AppTest requires explicitly selecting each active page between interactions.
-        app.switch_page("pages/homework.py").run()
+        app.switch_page("app_pages/homework.py").run()
         app.button(key=f"homework_open_{homework['_id']}").click().run()
         assert not app.exception
-        assert [t.value for t in app.title] == [homework["title"]], str(app)
-        app.switch_page("pages/homework_assignment.py").run()
+        assert [t.value for t in app.main.title] == [homework["title"]], str(app)
+        app.switch_page("app_pages/homework_assignment.py").run()
         # Instructor-only fields must never be rendered into the student's page.
         assert all("PRIVATE ANSWER" not in e.value for e in [*app.markdown, *app.text, *app.caption])
         assert all("PRIVATE GUIDANCE" not in e.value for e in [*app.markdown, *app.text, *app.caption])
@@ -195,11 +195,11 @@ def test_student_flow_from_dashboard_to_submission(homework):
         next(b for b in app.button if b.label == "Back to homework").click().run()
         assert not app.exception
         assert any("Awaiting grading" in c.value for c in app.caption)
-        app.switch_page("pages/homework.py").run()
+        app.switch_page("app_pages/homework.py").run()
         next(b for b in app.button if b.label == "Back to dashboard").click().run()
         assert not app.exception
         assert app.title[0].value == "Hello Student"
-        app.switch_page("pages/home.py").run()
+        app.switch_page("app_pages/overview.py").run()
         app.button(key=f"recentbtn_homework_{homework['_id']}").click().run()
         assert not app.exception
         assert app.title[0].value == homework["title"]

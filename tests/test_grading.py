@@ -277,7 +277,7 @@ def test_student_submit_displays_saved_problem_grades_and_does_not_grade_on_reru
     app.session_state["user"] = {"id": str(memory.student), "permissions": "student", "first_name": "Student"}
     app.session_state["homework_assignment_id"] = str(memory.assignment_id)
     app.run()
-    app.switch_page("pages/homework_assignment.py").run()
+    app.switch_page("app_pages/homework_assignment.py").run()
     app.text_area[0].set_value("Both true.")
     app.text_area[1].set_value("At least one.")
     next(button for button in app.button if button.label == "Submit homework").click().run()
@@ -323,7 +323,7 @@ def test_student_can_retry_saved_failed_attempt_in_ui(memory, monkeypatch):
     app.session_state["user"] = {"id": str(memory.student), "permissions": "student", "first_name": "Student"}
     app.session_state["homework_assignment_id"] = str(memory.assignment_id)
     app.run()
-    app.switch_page("pages/homework_assignment.py").run()
+    app.switch_page("app_pages/homework_assignment.py").run()
     assert any("could not finish grading" in warning.value for warning in app.warning)
     app.button(key=f"grade_submission_{sid}").click().run()
     assert not app.exception
@@ -376,7 +376,7 @@ def test_student_is_told_work_is_saved_when_grading_persistence_fails(memory, mo
     app.session_state["user"] = {"id": str(memory.student), "permissions": "student", "first_name": "Student"}
     app.session_state["homework_assignment_id"] = str(memory.assignment_id)
     app.run()
-    app.switch_page("pages/homework_assignment.py").run()
+    app.switch_page("app_pages/homework_assignment.py").run()
     app.text_area[0].set_value("Both true.")
     app.text_area[1].set_value("At least one.")
     next(button for button in app.button if button.label == "Submit homework").click().run()
