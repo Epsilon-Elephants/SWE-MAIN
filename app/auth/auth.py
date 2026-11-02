@@ -130,3 +130,21 @@ def authenticate_user(email: str, password: str) -> tuple [dict | None, str]:
 def log_out_user():
     st.session_state.clear()
     st.rerun()
+
+def reset_password(email: str, new_password: str) -> bool:
+    emailS = email.strip().lower()
+    if not email or "@" not in email:
+        return False, "Enter a valid email address."
+    elif not database.read_one("users", {"email": emailS}):
+        return False, f"Email {email} does not exist."
+    elif len(new_password) < 8:
+        return False, "Password must be at least 8 characters."
+
+    if not _initialize_users_collection():
+        return False, "The database is not configured."
+
+    hashed_password = _hash_password(new_password)
+    result = database.update_one("users",
+        {"email": emailS},
+              {"password_hash": hashed_password})
+    return True, f"Password updated for {email}"
