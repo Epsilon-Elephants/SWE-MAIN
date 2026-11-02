@@ -1,86 +1,23 @@
-import os
-
-import streamlit as st
-
-from pages.dashboards.dashboard import Dashboard
-from rocky.rocky import rocky
-from dotenv import load_dotenv
-from pathlib import Path
-import base64
+"""Student overview and the Kent State Rocky assistant."""
+from contextlib import closing
 import logging
+from urllib.parse import urlparse
+
 import requests
-import streamlit.components.v1 as components
+import streamlit as st
+from ddgs import DDGS
+from dotenv import load_dotenv
+from pymongo.errors import PyMongoError
 
-# placeholder until real data is added
-recently_visited = [
-    "Models",
-    "First Order Logic",
-    "Propositional Logic",
-    "Logic Resources",
-    "Truth Tables",
-    "Proof Techniques",
-]
-
-# labels under the search bar
-option = ["Homework", "Assignments", "Practice"]
+from db.student_dashboard import load_student_overview
+from pages.dashboards.dashboard import Dashboard
+from pages.dashboards.student.recently_visited import get_recent
+from rocky.rocky import rocky
 
 
-# path for Rocky icon image
-rocky_path = Path(__file__).resolve().parents[2] / "assets" / "rocky_icon.png"
-
-# path for css styling
-css_path = Path(__file__).resolve().parent / "student.css"
-
-# allows student.css be wrapped in style so the page can apply it
-def load_css() -> str:
-    text = css_path.read_text(encoding="utf-8")
-    lines = [line for line in text.splitlines() if line.strip()]
-    return "<style>\n" + "\n".join(lines) + "\n</style>"
-
-# shows the Rocky icon in bottom right of the web-app
-def rocky_css() -> str:
-   if not rocky_path.exists():
-      return ""
-# turns the image into text so it can be placed in the CSS
-   encoded = base64.b64encode(rocky_path.read_bytes()).decode("ascii")
-   return f"""
-
-<style>
-.st-key-student_rocky_button button,
-.st-key-student_rocky_button button:hover,
-.st-key-student_rocky_button button:focus,
-.st-key-student_rocky_button button:active {{
-    background: transparent url("data:image/png;base64,{encoded}") center / contain no-repeat !important;
-    border: none !important;
-    box-shadow: none !important;
-}}
-.st-key-student_rocky_button button p {{ font-size: 0 !important; }}
-</style>
-"""
-
-# script for when the mouse is hovering over "Recently visited" to move it left and right
-wheel_script = """
-<script>
-(function() {
-    const doc = window.parent.document;
-    function attach() {
-    const scroller = doc.querySelector('.recent-scroller');
-    if (!scroller || scroller.dataset.wheelReady) return;
-    scroller.dataset.wheelReady = '1';
-    scroller.addEventListener('wheel', function(e) {
-     if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;
-     const max = scroller.scrollWidth - scroller.clientWidth;
-     const right = e.deltaY > 0;
-     if ((right && scroller.scrollLeft >= max - 1) || (!right && scroller.scrollLeft <= 0)) return;
-     e.preventDefault();
-     scroller.scrollLeft += e.deltaY;
-     }, { passive: false });
-    }
-    attach()
-    new MutationObserver(attach).observe(doc.body, { childList: true, subtree: true});
-})();
-</script>
-"""
+def open_homework(item_id):
+    st.session_state["homework_assignment_id"] = item_id
+    st.switch_page("app_pages/homework_assignment.py")
 
 # Creates one Rocky AI per login session
 def get_rocky():
@@ -99,6 +36,7 @@ def rocky_dialog() -> None:
       key="student_rocky_question",
    )
 
+    answer_slot = st.empty()
     if st.button("->", key="student_rocky_ask", type="primary"):
         if not question.strip():
             st.warning("Ask a question first.")
@@ -107,80 +45,119 @@ def rocky_dialog() -> None:
             try:
                 with st.spinner("Rocky is thinking..."):
                     bot = get_rocky()
-                    bot.make_payload(question.strip())
-                    st.session_state.student_rocky_answer = bot.send_payload()
+                    bot.make_payload(question.strip(), stream=True)
+                    with closing(bot.send_payload()) as response_stream:
+                        with answer_slot.container():
+                            st.session_state.student_rocky_answer = st.write_stream(response_stream)
             except requests.exceptions.Timeout:
+                answer_slot.empty()
                 st.session_state.pop("rocky_client", None)
                 logging.exception("Rocky request timed out")
                 st.error("Rocky timed out. Please try again shortly.")
             except requests.exceptions.ConnectionError:
+                answer_slot.empty()
                 st.session_state.pop("rocky_client", None)
                 logging.exception("Could not connect to Rocky")
                 st.error("Unable to connect to Rocky. Please try again later.")
             except Exception:
+                answer_slot.empty()
                 st.session_state.pop("rocky_client", None)
                 logging.exception("Rocky request failed")
                 st.error("Rocky is unavailable right now. Please try again later.")
 
     answer = st.session_state.get("student_rocky_answer")
     if answer:
-        st.markdown(answer)
+        answer_slot.markdown(answer)
 
 
-# student dashboard
 class studentDash(Dashboard):
-    def __init__(self):
-        super().__init__()
-# load/draw the whole page top to bottom        
     def load_dash(self):
-        super().load_dash()
-
-        st.markdown(load_css() + rocky_css(), unsafe_allow_html=True)
-
-        st.write("")
-        self.render_search()
-        st.write("")
-        st.write("")
+        user = st.session_state.get("user") or {}
+        st.caption("YOUR CLASSROOM / OVERVIEW")
+        st.title(f"Hello {user.get('first_name') or 'Student'}")
+        st.caption("Your courses, coursework, and progress in one place.")
+        try:
+            overview = load_student_overview(user.get("id"))
+        except (ValueError, RuntimeError, PyMongoError):
+            logging.exception("Could not load student overview")
+            st.error("Could not load your overview. Please try again.")
+        else:
+            metrics = st.columns(4)
+            values = [len(overview["classes"]), len(overview["assignments"]),
+                      overview["attempts"], overview["awaiting_grading"]]
+            for column, label, value in zip(metrics, ["Classes", "Available assignments", "Submitted attempts", "Awaiting grading"], values):
+                with column.container(border=True):
+                    st.metric(label, value)
+            courses, work = st.columns([1, 1], gap="large")
+            with courses:
+                st.subheader("Your classes")
+                if not overview["classes"]:
+                    st.info("You are not enrolled in a class yet. Your professor can add you to a class.")
+                for classroom in overview["classes"]:
+                    with st.container(border=True):
+                        st.markdown(f"**{classroom['Class']}**")
+                        earned, possible = classroom["Earned points"], classroom["Possible points"]
+                        st.metric("Class grade", f"{earned / possible * 100:.1f}%" if possible else "Not graded")
+                        st.caption(f"{earned:g} / {possible:g} points recorded by your professor")
+            with work:
+                st.subheader("Coursework")
+                pending = [row for row in overview["assignments"] if not row["submitted"]]
+                st.caption(f"{len(pending)} available assignment(s) without a submission.")
+                for row in sorted(pending, key=lambda row: str(row.get("due_date") or "9999"))[:5]:
+                    with st.container(border=True):
+                        st.markdown(f"**{row['title']}**")
+                        st.caption(row["class_name"])
+                        if row.get("due_date"):
+                            st.caption(row["due_date"].strftime("Due %b %d, %Y, %H:%M UTC"))
+                if not pending:
+                    st.info("You have no unsubmitted coursework right now.")
+        with st.container(horizontal=True):
+            if st.button("Homework", key="student_filter_Homework", icon=":material/assignment:", type="primary"):
+                st.switch_page("app_pages/homework.py")
+            if st.button("Practice", key="student_filter_Practice", icon=":material/psychology:"):
+                st.switch_page("app_pages/practice.py")
+            if st.button("Ask Rocky", key="student_rocky_button", icon=":material/chat:"):
+                rocky_dialog()
         self.render_recently_visited()
-        self.render_rocky_button()
+        with st.expander("Find learning resources", icon=":material/search:"):
+            self.render_search()
 
-# search bar with 3 buttons underneath
-    def render_search(self):
-        _, middle, _ = st.columns([1,2,1])
-        with middle:
-            st.text_input(
-                "Search for resources",
-                placeholder= "Search for resources",
-                label_visibility="collapsed",
-                key="student_search_query",
-            )
-            pill_cols = st.columns(len(option))
-            for col, label in zip(pill_cols, option):
-                col.button(label, key=f"student_filter_{label}", width="stretch")
-
-# the "Recently visited" sesction with placeholder cards that scroll sideways
     def render_recently_visited(self):
-        st.markdown( 
-            '<div class="section-title">Recently visited</div>',
-            unsafe_allow_html=True,)
+        st.subheader("Recently visited")
+        items = [item for item in get_recent() if item.get("kind") == "homework"]
+        if not items:
+            st.caption("Nothing here yet. Open an assignment!")
+            return
+        with st.container(horizontal=True, key="recent_scroller"):
+            for item in items:
+                with st.container(border=True, key=f"recentcard_homework_{item['item_id']}"):
+                    st.caption("Homework")
+                    if st.button(item["title"], key=f"recentbtn_homework_{item['item_id']}"):
+                        open_homework(item["item_id"])
 
-# builds placeholder cards for each item in the list box with title
-        cards ="".join(
-            f'<div class="card"><div class="thumb"></div>'
-            f'<div class="title">{title}</div></div>'
-            for title in recently_visited
-        )
-
-# puts all the cards in a scrolling row
-        st.markdown(
-            f'<div class="recent-scroller">{cards}</div>',
-            unsafe_allow_html=True,
-        )
-
-# loads the wheel scroll script
-        components.html(wheel_script, height=0)
-
-# loads rocky button in botttom right corner 
-    def render_rocky_button(self):
-        if st.button("Rocky", key="student_rocky_button", help="Need help?"):
-                    rocky_dialog()
+    def render_search(self):
+        st.caption("Searches the public web. Your query is sent to an external search service; homework is not sent automatically.")
+        with st.form("student_resource_search", border=False):
+            query = st.text_input("Search for resources", placeholder="For example, propositional logic", key="student_search_query", max_chars=300)
+            submitted = st.form_submit_button("Search resources", icon=":material/search:")
+        if submitted:
+            st.session_state.pop("student_search_results", None)
+            if not query.strip():
+                st.info("Enter a search term.")
+            else:
+                try:
+                    results = DDGS().text(query.strip(), max_results=5)
+                    st.session_state.student_search_results = list(results or [])
+                except Exception:
+                    st.error("Search is temporarily unavailable.")
+        if "student_search_results" in st.session_state:
+            results = st.session_state.student_search_results
+            if not results:
+                st.info("No results found.")
+            for result in results:
+                url = result.get("href", "")
+                if urlparse(url).scheme not in {"http", "https"}:
+                    continue
+                st.link_button(result.get("title", "Resource"), url)
+                description = result.get("body", "")
+                st.caption(description[:200] + ("..." if len(description) > 200 else ""))

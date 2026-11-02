@@ -1,35 +1,39 @@
-import sys
-import unittest
+"""Account navigation uses registered pages and logout clears all user state."""
 from pathlib import Path
+from unittest.mock import patch
 
-import app
-
-sys.path.append(str(Path(__file__).resolve().parents[1] / "app"))
-
+import pytest
+from bson import ObjectId
 from streamlit.testing.v1 import AppTest
 
+from db.DataBase import db
 
-class TestSettings(unittest.TestCase):
-    def test_gear_opens_settings_page_and_back_returns(self):
-        test_app = AppTest.from_string('''
-import streamlit as st
-from pages.dashboards.admin.admin import adminDash
-st.session_state.user = {
-    "permissions": "admin",
-    "first_name": "Admin",
-    "email": "admin@example.com",
-}
-adminDash().load_dash()
-''')
-        test_app.run()
-        test_app.button(key="admin_settings_open").click().run()
-        self.assertFalse(test_app.exception)
-        self.assertEqual(test_app.title[0].value, "Settings")
-        self.assertEqual(test_app.text_input[1].value, "admin@example.com")
-        self.assertEqual(test_app.toggle[0].label, "Compact tables")
-        test_app.button(key="settings_back").click().run()
-        self.assertEqual(test_app.title[0].value, "Admin dashboard")
+pytestmark = pytest.mark.regression
 
 
-if __name__ == "__main__":
-    unittest.main()
+def test_professor_account_page_back_and_logout():
+    app = AppTest.from_file(str(Path(__file__).resolve().parents[1] / "app/app.py"))
+    app.session_state.user = {
+        "id": str(ObjectId()), "permissions": "professor",
+        "first_name": "Ada", "email": "ada@example.com",
+    }
+    app.session_state.selected_assignment_id = "assignment-id"
+    with patch("pages.dashboards.professor.list_assignments_for_professor", return_value=[]), patch(
+        "pages.dashboards.professor._load_assignment_context", return_value=({}, {}),
+    ), patch.object(db, "list_classes_page", return_value=([], False)):
+        app.run()
+        assert not app.exception
+        app.button(key="dashboard_settings_open").click().run()
+        assert not app.exception
+        assert app.title[0].value == "Settings"
+        assert app.text_input[1].value == "ada@example.com"
+        app.switch_page("app_pages/settings.py").run()
+        app.button(key="settings_back").click().run()
+        assert not app.exception
+        assert app.title[0].value == "Professor Dashboard"
+        assert app.session_state.selected_assignment_id == "assignment-id"
+        app.switch_page("app_pages/settings.py").run()
+        app.button(key="settings_logout").click().run()
+        assert not app.exception
+        assert "selected_assignment_id" not in app.session_state
+        assert app.session_state.user is None
