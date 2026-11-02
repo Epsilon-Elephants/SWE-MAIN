@@ -17,7 +17,7 @@ from .rate_limit import use_attempt
 logger = logging.getLogger(__name__)
 database = DataBase()
 
-#Hashing passwords with SHA256
+# Hash passwords with a per-account salt and scrypt.
 def _hash_password(password: str, salt: bytes | None = None) -> str:
     salt = salt or secrets.token_bytes(16)
     password_hash = hashlib.scrypt(
@@ -47,7 +47,7 @@ def _verify_password(password: str, stored_hash: str) -> bool:
             p=1,
         )
         return hmac.compare_digest(actual_hash, expected_hash)
-    except (ValueError, TypeError):
+    except (ValueError, TypeError, AttributeError):
         return False
 
 # Ensure the users collection has a unique email index.
@@ -100,12 +100,13 @@ def register_user(
 def authenticate_user(email: str, password: str) -> tuple [dict | None, str]:
     emailS = email.strip().lower()
 
-    allowed, retry_after = use_attempt(
-        action="login",
-        identifier=emailS,
-        limit=5,
-        window_seconds=15*60
-    )
+    try:
+        allowed, retry_after = use_attempt(
+            action="login", identifier=emailS, limit=5, window_seconds=15*60,
+        )
+    except (PyMongoError, RuntimeError):
+        logger.exception("Failed to check login attempts")
+        return None, "Login is temporarily unavailable."
     if not allowed:
         return None, f"Too many attempts, Try again in {retry_after} seconds"
     
@@ -117,7 +118,11 @@ def authenticate_user(email: str, password: str) -> tuple [dict | None, str]:
         return None, "Login is temporarily unavailable."
     if (user and user.get("permissions") in {"student", "professor"}
             and _verify_password(password, user.get("password_hash", ""))):
-        database.delete_one("rate_limits", {"action": "login", "identifier": emailS})
+        try:
+            database.delete_one("rate_limits", {"action": "login", "identifier": emailS})
+        except (PyMongoError, RuntimeError):
+            logger.exception("Failed to clear login attempts")
+            return None, "Login is temporarily unavailable."
         return {
             "id": str(user["_id"]),
             "email": user["email"],

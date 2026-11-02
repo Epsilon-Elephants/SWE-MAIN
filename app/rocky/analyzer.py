@@ -18,11 +18,11 @@ def analyze_student_weaknesses(attempts: list[dict], questions: list[dict]) -> L
     """
     Analyzes boolean question grades or numeric assignment performance.
     Each scored observation counts once; rounding belongs in display formatting.
-    
+
     Args:
         attempts: List of Attempt dictionaries for a specific student.
         questions: List of Question dictionaries corresponding to the attempts.
-        
+
     Returns:
         A list of dictionaries representing topic performance, sorted from lowest accuracy to highest.
         Example: [{"topic": "Predicate Logic", "accuracy": 0.40, "questions_attempted": 10}]
@@ -39,10 +39,10 @@ def analyze_student_weaknesses(attempts: list[dict], questions: list[dict]) -> L
     for attempt in attempts:
         q_id = str(attempt.get('question_id'))
         topic = question_topics.get(q_id)
-        
+
         if not topic:
             continue
-            
+
         accuracy = _attempt_accuracy(attempt)
         if accuracy is None:
             continue
@@ -133,5 +133,3 @@ def filter_weak_topics(
     """
     weak = [t for t in ranked_topics if t.get("accuracy", 1.0) < threshold]
     return weak[:max_topics]
-
-

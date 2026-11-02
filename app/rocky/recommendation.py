@@ -281,7 +281,7 @@ class RecommendationEngine:
                 accuracy_pct = int(round(item.get("accuracy", 0.0) * 100))
                 priority = "high" if idx == 0 else "medium"
                 fallback_recommendations.append(
-                    TopicRecommendation(    
+                    TopicRecommendation(
                         topic=topic,
                         priority=priority,
                         reason=f"Identified as priority review area with {accuracy_pct}% accuracy over {item.get('questions_attempted', 0)} attempts.",

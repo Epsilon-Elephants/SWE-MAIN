@@ -6,6 +6,7 @@ Homework answers are saved first, then Rocky grades each problem against the pro
 
 ## Documentation
 
+- [Product audit — October 26, 2026](docs/product-audit-2026-10-26.md): requirement coverage, defects, changes, verification, and remaining work.
 - [Local setup and development](docs/development.md): configuration, running the app, tests, and common setup issues.
 - [How the application works](docs/architecture.md): navigation, responsibilities, collections, and access rules.
 - [Problem format and AI integration](docs/ai-grading.md): problem fields, grading input/output, automatic scores, retries, and database setup.

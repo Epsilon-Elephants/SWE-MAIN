@@ -342,4 +342,3 @@ def get_class_performance_from_db(
         db_instance.find("homework_submissions", {"class_id": class_obj_id, "grading_status": "graded"}),
     )
     return attempts + scored_attempts, questions + scored_questions
-
