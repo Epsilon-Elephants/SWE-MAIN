@@ -1,7 +1,7 @@
 """Student homework views; private grading fields stay on the server."""
 
 import logging
-from datetime import datetime, timezone
+from datetime import timezone
 
 import streamlit as st
 from pymongo.errors import PyMongoError
@@ -15,6 +15,7 @@ from homework.schema import normalize_problems
 from homework.grading import grade_submission
 from homework.results import grading_action, grading_label, show_problem_result
 
+from pages.dashboards.student.due_dates import due_sort_key, due_status, resolve_timezone
 from pages.dashboards.student.recently_visited import record_visit
 
 
@@ -29,25 +30,42 @@ def student_user():
     return user
 
 
-def format_date(value):
+def user_tz():
+    #browser timezone
+    return resolve_timezone(getattr(st.context, "timezone", None))
+
+
+def format_date(value, tz=None):
     if value is None:
         return "Not set"
-    return value.strftime("%b %d, %Y, %H:%M UTC")
+    aware = value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value
+    return aware.astimezone(tz or timezone.utc).strftime("%b %d, %Y, %H:%M %Z")
 
 
-def show_details(assignment, class_name):
+def show_due_badge(assignment, submitted=False):
+    # show badge for due date status
+    status = due_status(assignment.get("due_date"), tz=user_tz())
+    if submitted:
+        st.markdown(":green-badge[:material/check_circle: Submitted]")
+    elif status.kind != "none":
+        st.markdown(f":{status.color}-badge[{status.icon} {status.badge}]")
+    return status
+
+
+def show_details(assignment, class_name, submitted=False):
+    tz = user_tz()
     st.caption(f"Class: {class_name}")
     if assignment.get("description"):
         st.write(assignment["description"])
+    status = show_due_badge(assignment, submitted)
     st.caption(
-        f"Posted: {format_date(assignment.get('posted'))} · "
-        f"Due: {format_date(assignment.get('due_date'))}"
+        f"Posted: {format_date(assignment.get('posted'), tz)} · "
+        f"Due: {format_date(assignment.get('due_date'), tz)}"
     )
     problems = normalize_problems(assignment.get("problems"))
     st.caption(f"{len(problems)} questions · {sum(p['points'] for p in problems):g} points")
-    due = assignment.get("due_date")
-    if due and due.replace(tzinfo=timezone.utc) < datetime.now(timezone.utc):
-        st.caption("Past due · Late submissions are accepted.")
+    if status.kind == "overdue" and not submitted:
+        st.caption("Late submissions are accepted.")
     return problems
 
 
@@ -67,13 +85,23 @@ def show_homework_list():
             latest.setdefault(submission["assignment_id"], submission)
         if not assignments:
             st.info("No homework is available yet. Posted homework from your enrolled classes will appear here.")
-        for assignment in sorted(assignments, key=lambda row: (row.get("due_date") is None, str(row.get("due_date", "")))):
+        tz = user_tz()
+        late = sum(
+            1 for row in assignments
+            if row["_id"] not in latest and due_status(row.get("due_date"), tz=tz).kind == "overdue"
+        )
+        if late:
+            st.warning(f"{late} assignment(s) overdue. Late work is still accepted, so submit as soon as you can.",
+                       icon=":material/error:")
+        # Unsubmitted work first (most overdue at the top), then submitted work.
+        ordered = sorted(assignments, key=lambda row: (row["_id"] in latest, due_sort_key(row.get("due_date"))))
+        for assignment in ordered:
             with st.container(border=True):
                 st.subheader(assignment["title"])
-                show_details(assignment, classes.get(assignment["class_id"], "Class unavailable"))
                 submission = latest.get(assignment["_id"])
+                show_details(assignment, classes.get(assignment["class_id"], "Class unavailable"), bool(submission))
                 if submission:
-                    st.caption(f"Submitted: {format_date(submission['submitted_at'])} · {grading_label(submission)}")
+                    st.caption(f"Submitted: {format_date(submission['submitted_at'], tz)} · {grading_label(submission)}")
                 else:
                     st.caption("Not submitted")
                 if st.button("Open homework", key=f"homework_open_{assignment['_id']}", icon=":material/assignment:"):
@@ -100,8 +128,9 @@ def show_homework_assignment():
         record_visit("homework", assignment_id, assignment["title"])
         classroom = db.read_one("classes", {"_id": assignment["class_id"]}) or {}
         history = list_submissions_for_student(user["id"], assignment_id)
+        tz = user_tz()
         st.title(assignment["title"])
-        problems = show_details(assignment, classroom.get("name", "Class unavailable"))
+        problems = show_details(assignment, classroom.get("name", "Class unavailable"), bool(history))
         if message := st.session_state.pop("homework_grading_notice", None):
             st.warning(message)
         if history:
@@ -109,7 +138,7 @@ def show_homework_assignment():
             st.caption("You can submit another attempt. Each submitted attempt is saved separately.")
             with st.expander(f"Submitted attempts ({len(history)})"):
                 for attempt in history:
-                    st.write(f"Submitted {format_date(attempt['submitted_at'])} · {grading_label(attempt)}")
+                    st.write(f"Submitted {format_date(attempt['submitted_at'], tz)} · {grading_label(attempt)}")
                     responses = {row["problem_id"]: row["answer"] for row in attempt["answers"]}
                     for number, problem in enumerate(attempt["assignment_snapshot"]["problems"], 1):
                         st.markdown(f"**Question {number}**")
