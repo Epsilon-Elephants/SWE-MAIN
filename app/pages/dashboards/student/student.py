@@ -11,6 +11,7 @@ from pymongo.errors import PyMongoError
 
 from db.student_dashboard import load_student_overview
 from pages.dashboards.dashboard import Dashboard
+from pages.dashboards.student.due_dates import due_sort_key, due_status, resolve_timezone
 from pages.dashboards.student.recently_visited import get_recent
 from rocky.rocky import rocky
 
@@ -101,14 +102,24 @@ class studentDash(Dashboard):
                         st.caption(f"{earned:g} / {possible:g} points recorded by your professor")
             with work:
                 st.subheader("Coursework")
-                pending = [row for row in overview["assignments"] if not row["submitted"]]
+                tz = resolve_timezone(getattr(st.context, "timezone", None))
+                pending = sorted((row for row in overview["assignments"] if not row["submitted"]),
+                                 key=lambda row: due_sort_key(row.get("due_date")))
+                statuses = [due_status(row.get("due_date"), tz=tz) for row in pending]
+                late = sum(status.kind == "overdue" for status in statuses)
                 st.caption(f"{len(pending)} available assignment(s) without a submission.")
-                for row in sorted(pending, key=lambda row: str(row.get("due_date") or "9999"))[:5]:
+                if late:
+                    st.warning(f"{late} assignment(s) overdue. Late work is still accepted, so submit as soon as you can.",
+                               icon=":material/error:")
+                for row, status in list(zip(pending, statuses))[:5]:
                     with st.container(border=True):
                         st.markdown(f"**{row['title']}**")
                         st.caption(row["class_name"])
-                        if row.get("due_date"):
-                            st.caption(row["due_date"].strftime("Due %b %d, %Y, %H:%M UTC"))
+                        st.markdown(f":{status.color}-badge[{status.icon} {status.badge}]")
+                        if status.when:
+                            st.caption(f"Due {status.when}")
+                if len(pending) > 5:
+                    st.caption(f"+ {len(pending) - 5} more on the Homework page.")
                 if not pending:
                     st.info("You have no unsubmitted coursework right now.")
         with st.container(horizontal=True):
