@@ -128,6 +128,8 @@ def test_student_flow_from_dashboard_to_submission(homework):
     history = []
 
     def read(collection, query):
+        if collection == "recent_visits":
+            return None
         if collection == "classes":
             return {"name": "Logic class"}
         if collection == "users":
@@ -156,7 +158,7 @@ def test_student_flow_from_dashboard_to_submission(homework):
         history.append(document)
         return document["_id"]
 
-    with patch.object(db, "read_one", side_effect=read), patch.object(db, "find", side_effect=find), patch.object(db, "insert_one", side_effect=insert) as save, patch("homework.views.grade_submission", return_value="ungraded") as grade:
+    with patch.object(db, "read_one", side_effect=read), patch.object(db, "find", side_effect=find), patch.object(db, "insert_one", side_effect=insert) as save, patch.object(db, "upsert_one"), patch("homework.views.grade_submission", return_value="ungraded") as grade:
         app.run()
         assert not app.exception
         app.button(key="student_filter_Homework").click().run()

@@ -11,7 +11,7 @@ vertical_alignment="center")
 def get_view() -> str:
     return st.query_params.get("view", "home")
 
-def get_item() -> None:
+def get_item() -> str | None:
     return st.query_params.get("item")
 
 def open_view(name: str) -> None:
