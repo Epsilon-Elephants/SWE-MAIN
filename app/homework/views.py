@@ -97,8 +97,9 @@ def show_homework_assignment():
         return
     try:
         assignment = get_homework_for_student(assignment_id, user["id"])
-        record_visit("homework", assignment_id, assignment["title"])
         classroom = db.read_one("classes", {"_id": assignment["class_id"]}) or {}
+        due = assignment.get("due_date")
+        record_visit("homework", assignment_id, assignment["title"], class_name=classroom.get("name", ""), due=f"Due {format_date(due)}" if due else "No due date",)
         history = list_submissions_for_student(user["id"], assignment_id)
         st.title(assignment["title"])
         problems = show_details(assignment, classroom.get("name", "Class unavailable"))

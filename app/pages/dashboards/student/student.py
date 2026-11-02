@@ -3,6 +3,7 @@ from contextlib import closing
 import logging
 from urllib.parse import urlparse
 
+import html
 import requests
 import streamlit as st
 from ddgs import DDGS
@@ -18,6 +19,8 @@ from rocky.rocky import rocky
 def open_homework(item_id):
     st.session_state["homework_assignment_id"] = item_id
     st.switch_page("app_pages/homework_assignment.py")
+
+OPENERS = {"homework": open_homework}
 
 # Creates one Rocky AI per login session
 def get_rocky():
@@ -124,16 +127,21 @@ class studentDash(Dashboard):
 
     def render_recently_visited(self):
         st.subheader("Recently visited")
-        items = [item for item in get_recent() if item.get("kind") == "homework"]
+        items = [item for item in get_recent() if item.get("kind") in OPENERS]
         if not items:
             st.caption("Nothing here yet. Open an assignment!")
             return
         with st.container(horizontal=True, key="recent_scroller"):
             for item in items:
-                with st.container(border=True, key=f"recentcard_homework_{item['item_id']}"):
-                    st.caption("Homework")
-                    if st.button(item["title"], key=f"recentbtn_homework_{item['item_id']}"):
-                        open_homework(item["item_id"])
+             kind = item["kind"]
+             lines = [item.get("class_name"), kind.title(), item.get("due")]
+             text = "<br>".join(html.escape(line) for line in lines if line)
+             with st.container(border=True, key=f"recentcard_{kind}_{item['item_id']}"):
+                 st.markdown(
+                    f'<div style="font-size:0.78rem; opacity:0.75; line-height:1.35;">{text}</div>',                      unsafe_allow_html=True,
+                 )
+                 if st.button(item["title"], key=f"recentbtn_{kind}_{item['item_id']}"):
+                     OPENERS[kind](item["item_id"])
 
     def render_search(self):
         st.caption("Searches the public web. Your query is sent to an external search service; homework is not sent automatically.")
