@@ -115,7 +115,7 @@ def get_assignment(assignment_id):
     if not assignment_id:
         raise ValueError("Assignment ID is required.")
 
-    return db.read_one("assignments", {"_id": assignment_id})
+    return db.read_one("assignments", {"_id": db._object_id(assignment_id, "assignment ID")})
 
 
 # Return all assignments created by one professor
@@ -163,6 +163,25 @@ def update_assignment(
         {"_id": assignment_id, "professor_id": professor_id},
         fields,
     )
+    return result.matched_count > 0
+
+
+def set_assignment_status(assignment_id, professor_id: str, status: str):
+    """Close or reopen a professor's assignment without touching its content.
+
+    Publishing re-validates problems and dates so an incomplete assignment can't go live.
+    """
+    if not assignment_id:
+        raise ValueError("Assignment ID is required.")
+    if not professor_id:
+        raise ValueError("Professor ID is required.")
+    if status not in ("draft", "published", "closed"):
+        raise ValueError("Assignment status must be draft, published, or closed.")
+    query = {"_id": assignment_id, "professor_id": professor_id}
+    fields = {"status": status}
+    if status == "published":
+        fields.update(_schedule_update(query, _UNSET, _UNSET, status))
+    result = db.update_one("assignments", query, fields)
     return result.matched_count > 0
 
 

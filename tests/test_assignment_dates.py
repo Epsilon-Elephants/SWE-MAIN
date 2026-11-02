@@ -4,6 +4,7 @@ from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import pytest
 from bson import ObjectId
 
 sys.path.append(str(Path(__file__).resolve().parents[1] / "app"))
@@ -11,6 +12,8 @@ sys.path.append(str(Path(__file__).resolve().parents[1] / "app"))
 from db.DataBase import db
 from db.assignments import create_assignment, list_assignments_for_student, update_assignment
 from db.completed_assignments import complete_assignment, list_completed_assignments_for_user
+
+pytestmark = [pytest.mark.unit, pytest.mark.regression]
 
 
 class TestAssignmentDates(unittest.TestCase):

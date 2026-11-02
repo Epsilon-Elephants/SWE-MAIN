@@ -1,4 +1,7 @@
 /.env
+/.env.*
+!/.env.example
+/.streamlit/secrets.toml
 /.venv/
 __pycache__/
 .pytest_cache/
@@ -9,3 +12,4 @@ test-results.xml
 .agents/skills/developing-with-streamlit
 .claude/skills/developing-with-streamlit
 /.idea
+.streamlit/secrets.toml
