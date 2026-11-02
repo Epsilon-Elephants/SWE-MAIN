@@ -12,7 +12,7 @@ from auth import auth
 from db.DataBase import db
 from db.assignments import get_assignment
 from db.homework_submissions import (
-    list_homework_submissions_for_professor, submit_homework, summarize_homework_submissions,
+    list_submissions_for_assignment, submit_homework, summarize_submissions,
 )
 from db.student_dashboard import load_student_overview
 
@@ -73,7 +73,7 @@ def test_assignment_lookup_normalizes_a_session_string_id():
 def test_dashboard_counts_answers_including_ungraded_submissions():
     assignment_id = ObjectId()
     with patch.object(db, "aggregate", return_value=[{"_id": assignment_id, "students": 1, "attempts": 2}]) as aggregate:
-        assert summarize_homework_submissions([str(assignment_id)]) == {assignment_id: {"students": 1, "attempts": 2}}
+        assert summarize_submissions([str(assignment_id)]) == {assignment_id: {"students": 1, "attempts": 2}}
     collection, pipeline = aggregate.call_args.args
     assert collection == "homework_submissions"
     assert pipeline[0] == {"$match": {"assignment_id": {"$in": [assignment_id]}}}
@@ -81,23 +81,21 @@ def test_dashboard_counts_answers_including_ungraded_submissions():
 
 def test_no_assignments_requires_no_submission_query():
     with patch.object(db, "aggregate") as aggregate:
-        assert summarize_homework_submissions([]) == {}
+        assert summarize_submissions([]) == {}
     aggregate.assert_not_called()
 
 
 def test_nonowner_cannot_read_student_work():
     with patch.object(db, "read_one", return_value=None), patch.object(db, "aggregate") as aggregate:
-        with pytest.raises(ValueError, match="Assignment not found"):
-            list_homework_submissions_for_professor(ObjectId(), str(ObjectId()))
+        with pytest.raises(ValueError, match="Assignment is not available"):
+            list_submissions_for_assignment(ObjectId(), str(ObjectId()))
     aggregate.assert_not_called()
 
 
 def test_former_instructor_cannot_read_student_work():
-    with patch.object(db, "read_one", return_value={"class_id": ObjectId()}), patch.object(
-        db, "authorize_class_enrollment", side_effect=ValueError("Access denied"),
-    ), patch.object(db, "aggregate") as aggregate:
-        with pytest.raises(ValueError, match="Access denied"):
-            list_homework_submissions_for_professor(ObjectId(), str(ObjectId()))
+    with patch.object(db, "read_one", side_effect=[{"permissions": "professor"}, {"class_id": ObjectId()}, None]), patch.object(db, "aggregate") as aggregate:
+        with pytest.raises(ValueError, match="You do not teach"):
+            list_submissions_for_assignment(ObjectId(), str(ObjectId()))
     aggregate.assert_not_called()
 
 
@@ -143,7 +141,7 @@ def test_professor_creation_and_editor_are_real_pages():
         db, "find", return_value=[{"_id": class_id, "name": "Logic"}],
     ), patch("pages.dashboards.professor.create_assignment", return_value=assignment_id), patch(
         "pages.assignment_editor.get_assignment", return_value=assignment,
-    ), patch("pages.assignment_editor.list_homework_submissions_for_professor", return_value=[]):
+    ), patch("pages.assignment_editor.list_submissions_for_assignment", return_value=[]):
         app.run()
         assert not app.exception
         next(b for b in app.button if b.label == "Create assignment").click().run()
@@ -160,7 +158,7 @@ def test_professor_creation_and_editor_are_real_pages():
         app.switch_page("app_pages/edit_assignment.py").run()
         app.button(key="back_to_assignments").click().run()
         assert not app.exception
-        assert app.title[0].value == "Professor dashboard"
+        assert app.title[0].value == "Professor Dashboard"
 
 
 def test_login_page_handles_unconfigured_database():

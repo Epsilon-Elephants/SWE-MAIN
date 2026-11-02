@@ -30,7 +30,7 @@ def test_professor_account_page_back_and_logout():
         app.switch_page("app_pages/settings.py").run()
         app.button(key="settings_back").click().run()
         assert not app.exception
-        assert app.title[0].value == "Professor dashboard"
+        assert app.title[0].value == "Professor Dashboard"
         assert app.session_state.selected_assignment_id == "assignment-id"
         app.switch_page("app_pages/settings.py").run()
         app.button(key="settings_logout").click().run()

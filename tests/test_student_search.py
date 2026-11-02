@@ -15,7 +15,7 @@ def student_app():
     }
     with patch("pages.dashboards.student.student.load_student_overview", return_value={
         "classes": [], "assignments": [], "attempts": 0, "awaiting_grading": 0,
-    }):
+    }), patch("pages.dashboards.student.student.get_recent", return_value=[]):
         yield app
 
 

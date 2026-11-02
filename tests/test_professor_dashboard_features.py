@@ -128,7 +128,7 @@ def test_editor_closes_and_reopens(status, label, new_status):
     }
     with patch("pages.assignment_editor.get_assignment", return_value=assignment), patch(
         "pages.assignment_editor.set_assignment_status", return_value=True,
-    ) as set_status, patch("pages.assignment_editor.list_homework_submissions_for_professor", return_value=[]):
+    ) as set_status, patch("pages.assignment_editor.list_submissions_for_assignment", return_value=[]):
         app = editor_app(assignment_id, professor_id).run()
         assert not app.exception
         next(button for button in app.button if button.label == label).click().run()
@@ -145,7 +145,7 @@ def test_saving_closed_assignment_keeps_it_closed():
     }
     with patch("pages.assignment_editor.get_assignment", return_value=assignment), patch(
         "pages.assignment_editor.update_assignment", return_value=True,
-    ) as update, patch("pages.assignment_editor.list_homework_submissions_for_professor", return_value=[]):
+    ) as update, patch("pages.assignment_editor.list_submissions_for_assignment", return_value=[]):
         app = editor_app(assignment_id, professor_id).run()
         next(button for button in app.button if button.label == "Save assignment").click().run()
         assert not app.exception
@@ -160,21 +160,26 @@ def test_editor_lists_submissions():
         "problems": [{"problem_id": "first", "content": "Solve this"}],
     }
     rows = [{
-        "_id": ObjectId(), "user_id": ObjectId(), "grading_status": "ungraded",
+        "_id": ObjectId(), "user_id": ObjectId(), "grading_status": "graded",
+        "grading_result": {"total_points": 7.0, "max_points": 10.0, "percentage": 70.0,
+                           "problems": [{"problem_id": "first", "points_awarded": 7.0,
+                                         "max_points": 10.0, "feedback": "Good reasoning."}]},
         "submitted_at": datetime(2026, 11, 5, 14, 30),
         "answers": [{"problem_id": "first", "answer": "Student response"}],
         "assignment_snapshot": {"problems": [{"problem_id": "first", "content": "Solve this"}]},
         "user": {"first_name": "Grace", "last_name": "Hopper", "email": "grace@example.com"},
     }]
     with patch("pages.assignment_editor.get_assignment", return_value=assignment), patch(
-        "pages.assignment_editor.list_homework_submissions_for_professor", return_value=rows,
+        "pages.assignment_editor.list_submissions_for_assignment", return_value=rows,
     ):
         app = editor_app(assignment_id, professor_id).run()
     assert not app.exception
     table = app.dataframe[0].value
     assert list(table["Student"]) == ["Grace Hopper"]
-    assert list(table["Grading"]) == ["ungraded"]
+    assert list(table["Grade"]) == ["AI score: 7/10 points · 70%"]
+    assert list(table["Submitted"]) == ["Nov 05, 2026 14:30 UTC"]
     assert "Student response" in [text.value for text in app.text]
+    assert "Good reasoning." in [text.value for text in app.text]
 
 
 def test_submission_review_filters_attempts_when_student_changes():
@@ -192,7 +197,9 @@ def test_submission_review_filters_attempts_when_student_changes():
             "answers": [{"problem_id": "first", "answer": answer}],
             "assignment_snapshot": {"problems": [{"problem_id": "first", "content": "Solve this"}]},
         })
-    with patch("pages.assignment_editor.list_homework_submissions_for_professor", return_value=rows):
+    with patch("pages.assignment_editor.list_submissions_for_assignment", return_value=rows), patch(
+        "homework.results.grade_submission", return_value="graded",
+    ) as grade:
         app = AppTest.from_string('''
 from pages.assignment_editor import _render_submissions
 _render_submissions("assignment", "professor")
@@ -213,6 +220,9 @@ _render_submissions("assignment", "professor")
         assert len(app.selectbox[1].options) == 1
         assert app.selectbox[1].value == str(rows[1]["_id"])
         assert [text.value for text in app.text] == ["Other student response"]
+        app.button(key=f"grade_submission_{rows[1]['_id']}").click().run()
+        assert not app.exception
+        grade.assert_called_once_with(rows[1]["_id"], "professor")
 
         app.selectbox[0].select(str(student_id)).run()
         assert not app.exception

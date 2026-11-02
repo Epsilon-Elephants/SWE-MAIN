@@ -126,8 +126,11 @@ def test_student_flow_from_dashboard_to_submission(homework):
     app = AppTest.from_file(str(Path(__file__).resolve().parents[1] / "app/app.py"))
     app.session_state["user"] = {"id": user_id, "email": "student@example.com", "permissions": "student", "first_name": "Student"}
     history = []
+    recent_visits = {}
 
     def read(collection, query):
+        if collection == "recent_visits":
+            return recent_visits.get(query["user_id"])
         if collection == "classes":
             return {"name": "Logic class"}
         if collection == "users":
@@ -156,7 +159,11 @@ def test_student_flow_from_dashboard_to_submission(homework):
         history.append(document)
         return document["_id"]
 
-    with patch.object(db, "read_one", side_effect=read), patch.object(db, "find", side_effect=find), patch.object(db, "insert_one", side_effect=insert) as save:
+    def upsert(collection, query, fields):
+        assert collection == "recent_visits"
+        recent_visits[query["user_id"]] = copy.deepcopy(fields)
+
+    with patch.object(db, "read_one", side_effect=read), patch.object(db, "find", side_effect=find), patch.object(db, "insert_one", side_effect=insert) as save, patch.object(db, "upsert_one", side_effect=upsert), patch("homework.views.grade_submission", return_value="ungraded") as grade:
         app.run()
         assert not app.exception
         app.button(key="student_filter_Homework").click().run()
@@ -181,6 +188,7 @@ def test_student_flow_from_dashboard_to_submission(homework):
         assert not app.exception
         assert app.success
         assert len(history) == 1
+        grade.assert_called_once_with(history[0]["_id"], user_id)
         assert all("PRIVATE ANSWER" not in e.value for e in [*app.markdown, *app.text, *app.caption])
         app.run()  # Ordinary reruns must never create extra attempts.
         assert len(history) == 1
@@ -191,6 +199,23 @@ def test_student_flow_from_dashboard_to_submission(homework):
         next(b for b in app.button if b.label == "Back to dashboard").click().run()
         assert not app.exception
         assert app.title[0].value == "Hello Student"
+        app.switch_page("pages/home.py").run()
+        app.button(key=f"recentbtn_homework_{homework['_id']}").click().run()
+        assert not app.exception
+        assert app.title[0].value == homework["title"]
+        assert len(history) == 1
+
+        # Recent links survive a new session and still enforce current access.
+        restored = AppTest.from_file(str(Path(__file__).resolve().parents[1] / "app/app.py"))
+        restored.session_state.user = dict(app.session_state.user)
+        restored.run()
+        assert not restored.exception
+        recent = restored.button(key=f"recentbtn_homework_{homework['_id']}")
+        assert recent.label == homework["title"]
+        with patch("homework.views.get_homework_for_student", side_effect=ValueError("Homework is not available.")):
+            recent.click().run()
+        assert not restored.exception
+        assert restored.error[0].value == "Homework is not available."
 
 
 def test_empty_homework_and_nonstudent_guard():
@@ -214,7 +239,7 @@ show_assignment_editor("{homework['_id']}", "{professor_id}")
 ''')
     with patch("pages.assignment_editor.get_assignment", return_value=homework), patch(
         "pages.assignment_editor.update_problem", return_value=True,
-    ) as update, patch("pages.assignment_editor.list_homework_submissions_for_professor", return_value=[]):
+    ) as update, patch("pages.assignment_editor.list_submissions_for_assignment", return_value=[]):
         app.run()
         assert not app.exception
         app.number_input[0].set_value(3.0)

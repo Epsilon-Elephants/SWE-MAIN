@@ -52,7 +52,7 @@ show_assignment_editor("{assignment_id}", "{professor_id}")
         }
         with patch("pages.assignment_editor.get_assignment", return_value=assignment), patch(
             "pages.assignment_editor.update_assignment", return_value=True,
-        ) as update, patch("pages.assignment_editor.list_homework_submissions_for_professor", return_value=[]):
+        ) as update, patch("pages.assignment_editor.list_submissions_for_assignment", return_value=[]):
             app.run()
             self.assertFalse(app.exception)
             self.assertTrue(next(button for button in app.button if button.label == "Remove problem").disabled)
@@ -177,7 +177,7 @@ else:
     app.session_state.selected_assignment_id = assignment_id
     with patch("pages.assignment_editor.get_assignment", return_value=assignment), patch(
         "pages.assignment_editor.update_assignment", return_value=True,
-    ) as update, patch("pages.assignment_editor.list_homework_submissions_for_professor", return_value=[]):
+    ) as update, patch("pages.assignment_editor.list_submissions_for_assignment", return_value=[]):
         app.run()
         app.text_input[0].set_value("Updated homework")
         next(button for button in app.button if button.label == "Finish later").click().run()

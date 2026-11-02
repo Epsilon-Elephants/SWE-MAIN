@@ -6,7 +6,7 @@ import pytest
 import requests
 from streamlit.testing.v1 import AppTest
 
-from app.rocky.rocky import rocky
+from rocky.rocky import rocky
 
 pytestmark = pytest.mark.regression
 
@@ -14,7 +14,7 @@ pytestmark = pytest.mark.regression
 @pytest.fixture
 def client(monkeypatch):
     monkeypatch.setenv("ROCKY_KEY", "test-key")
-    with patch("app.rocky.rocky.requests.get") as get:
+    with patch("rocky.rocky.requests.get") as get:
         get.return_value.json.return_value = {"data": [{"id": "test-model"}]}
         return rocky()
 
@@ -34,7 +34,7 @@ def event(event_type, **fields):
 def test_default_returns_completed_text(client):
     client.make_payload("Hello", max_tokens=42, store=True)
     response = response_for('{"output_text": "Hello back"}')
-    with patch("app.rocky.rocky.requests.post", return_value=response) as post:
+    with patch("rocky.rocky.requests.post", return_value=response) as post:
         assert client.send_payload() == "Hello back"
     assert post.call_args.kwargs["json"] == {
         "model": "test-model", "input": "Hello", "max_output_tokens": 42,
@@ -56,7 +56,7 @@ def test_stream_yields_text_incrementally_and_closes(client, ending):
         + event("response.output_text.done", text="Héllo world") + ending
     )
     response = response_for(body)
-    with patch("app.rocky.rocky.requests.post", return_value=response) as post:
+    with patch("rocky.rocky.requests.post", return_value=response) as post:
         chunks = client.send_payload()
         post.assert_not_called()
         assert next(chunks) == "Héllo "
@@ -70,7 +70,7 @@ def test_stream_yields_text_incrementally_and_closes(client, ending):
 def test_closing_stream_releases_connection(client):
     client.make_payload("Hello", stream=True)
     response = response_for(event("response.output_text.delta", delta="Hi"))
-    with patch("app.rocky.rocky.requests.post", return_value=response):
+    with patch("rocky.rocky.requests.post", return_value=response):
         chunks = client.send_payload()
         assert next(chunks) == "Hi"
         chunks.close()
@@ -86,7 +86,7 @@ def test_closing_stream_releases_connection(client):
 def test_stream_failures_are_raised_and_closed(client, body):
     client.make_payload("Hello", stream=True)
     response = response_for(body)
-    with patch("app.rocky.rocky.requests.post", return_value=response):
+    with patch("rocky.rocky.requests.post", return_value=response):
         with pytest.raises(requests.exceptions.RequestException):
             list(client.send_payload())
     response.close.assert_called_once()
@@ -96,7 +96,7 @@ def test_stream_failures_are_raised_and_closed(client, body):
 def test_http_errors_close_response(client, stream):
     client.make_payload("Hello", stream=stream)
     response = response_for("unavailable", status=503)
-    with patch("app.rocky.rocky.requests.post", return_value=response):
+    with patch("rocky.rocky.requests.post", return_value=response):
         with pytest.raises(requests.exceptions.HTTPError):
             result = client.send_payload()
             if stream:
@@ -111,7 +111,7 @@ def test_multiline_sse_frame_without_final_blank_line(client):
         'data: "delta": "Hello"}\r\n\r\n'
         'data: {"type": "response.completed"}'
     )
-    with patch("app.rocky.rocky.requests.post", return_value=response):
+    with patch("rocky.rocky.requests.post", return_value=response):
         assert list(client.send_payload()) == ["Hello"]
 
 

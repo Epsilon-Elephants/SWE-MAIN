@@ -7,7 +7,7 @@ from pymongo.errors import PyMongoError
 from components.problem_editor import grading_fields, problem_editor
 from db.DataBase import db
 from db.assignments import create_assignment, list_assignments_for_professor
-from db.homework_submissions import summarize_homework_submissions
+from db.homework_submissions import summarize_submissions
 from pages.dashboards.dashboard import Dashboard
 from pages.dashboards.professor_classes import render_professor_classes
 from components.dashboard_header import render_dashboard_header
@@ -75,7 +75,7 @@ def _load_assignment_context(professor_id, assignments):
     try:
         classes = db.find("classes", {"instructor_id": db._object_id(professor_id, "professor ID")})
         class_names = {classroom["_id"]: classroom.get("name", "Untitled class") for classroom in classes}
-        completions = summarize_homework_submissions([assignment["_id"] for assignment in assignments])
+        completions = summarize_submissions([assignment["_id"] for assignment in assignments])
     except (ValueError, RuntimeError, PyMongoError):
         logger.exception("Failed to load professor dashboard details")
         st.caption("Class names and submission counts are unavailable right now.")
@@ -196,7 +196,7 @@ class professorDash(Dashboard):
 
     def load_dash(self):
         render_dashboard_header(
-            "Professor dashboard",
+            "Professor Dashboard",
             f"Welcome back, {st.session_state.user.get('first_name') or 'Professor'}",
         )
 

@@ -3,7 +3,6 @@ import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-import app
 import pytest
 from bson import ObjectId
 

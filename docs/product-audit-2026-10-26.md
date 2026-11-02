@@ -1,7 +1,8 @@
 # Product audit — Philosophy classroom
 
-**Date:** October 26, 2026 (America/New_York)  
-**Starting revision:** `e9bd14c`  
+**Date:** October 26, 2026 (America/New_York)
+
+**Starting revision:** `e9bd14c`
 **Scope:** Product requirements, application code, authentication/authorization, MongoDB persistence and metadata, Rocky integration, UI/navigation, dependencies, development configuration, documentation, and automated tests.
 
 ## Assessment

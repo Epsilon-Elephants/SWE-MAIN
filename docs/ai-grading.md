@@ -1,19 +1,20 @@
 # Problem format and AI integration
 
-This guide describes the contract implemented in
-[`app/homework/schema.py`](../app/homework/schema.py). It separates the existing
-grading-input builder from the grading integration that still needs to be built.
+The app grades short-answer homework with Kent State Rocky using the professor's
+reference answer and optional partial-credit rubric. Grades are stored on each
+saved submission and shown to students and professors.
 
-## What works today
+## What happens on submit
 
-Professors author structured short-answer problems. Students submit text answers,
-and the server saves those answers with a snapshot of the assignment. Submitting
-does not call AI, calculate a score, or create a completion record.
+1. The server checks the student's role, enrollment, assignment visibility, and exact answer IDs.
+2. Answers and a canonical assignment snapshot are saved before contacting Rocky.
+3. The grader claims that saved attempt with a ten-minute lease, builds its private grading input, and sends one request to Rocky.
+4. The server validates exactly one result per problem, finite points between zero and the saved maximum, and nonblank feedback. It calculates totals and a 0–100 percentage itself.
+5. The same submission becomes `graded`, with per-problem points, feedback, model, and grading time. There is no second completion record to duplicate during retries.
 
-`build_grading_payload(submission)` can turn a saved submission into JSON-safe
-grading input. No current submission code calls this helper. Separately, the
-student dashboard has a working Rocky question-and-answer dialog; it sends the
-student's typed question without automatically adding homework or reference answers.
+Students see AI scores and feedback in their submitted-attempt history. Professors
+see actual homework attempts in the assignment editor, including answers, scores,
+feedback, and a grading/retry button. Normal page reruns do not call the model.
 
 ## Canonical problem document
 
@@ -56,7 +57,8 @@ include metadata you want to keep. The existing problem ID is always preserved.
 For authoring, keep the student task in `content`, an example of a correct answer
 in `reference_answer`, and scoring criteria in `grading_guidance`. Use consistent
 topic names if results will later be grouped by topic. Empty reference answers
-and rubrics are accepted today; a future grader needs a policy for handling them.
+are allowed for authoring, but block grading until the professor supplies them.
+Rubrics are optional.
 
 LaTeX stays text in storage and in the AI input. JSON requires backslashes to be
 escaped: a prompt containing `$P \land Q$` is written as `"$P \\land Q$"` in JSON.
@@ -83,10 +85,10 @@ current enrollment, and assignment visibility, then saves:
 - An ordered `answers` list of `{problem_id, answer}` objects with trimmed text.
 
 Each submit creates a new attempt. The snapshot preserves the grading context if
-the live assignment is edited or deleted. Build future grading input from that
+the live assignment is edited or deleted. Build grading input from that
 saved snapshot rather than rereading the latest assignment's questions.
 
-## Exact input produced for future grading
+## Exact grading input
 
 For the example above, `build_grading_payload` returns this shape:
 
@@ -134,7 +136,8 @@ and belongs in server-side grading code, not a student download or chat widget.
 
 The HTTP body has `model`, `input` (a string), `max_output_tokens`, `store`, and
 `stream`. This transport body wraps the prompt; it is distinct from the structured
-homework payload above. No grading prompt template or response schema is wired in.
+homework payload above. The grading service wraps the structured payload in the instructions in
+`app/rocky/grading.py`. It requests JSON results and validates them before saving.
 
 Without streaming, the client returns the response's `output_text`. With
 `stream=True`, it returns a lazy iterator over SSE text deltas. Consume or close
@@ -146,23 +149,84 @@ The client itself does not load `.env`; its dashboard caller does. Standalone
 scripts must load configuration before constructing a client. Each send requires
 a fresh `make_payload` call because sending clears the prepared payload.
 
-## Remaining grading work
+## Validated output and storage
 
-The following is integration guidance, **not implemented behavior**:
+Rocky must return the following versioned shape; the order may differ from the
+questions, because the server matches results by ID:
 
-1. Load an authorized saved submission on the server and build its grading payload.
-2. Define a grading prompt and serialize the payload into Rocky's string input. Treat student answers as untrusted data, including text that asks the model to ignore the rubric.
-3. Define a versioned model-output contract with problem IDs, awarded points, and feedback. No canonical grading-output schema exists yet.
-4. Validate the returned structure, exact problem-ID coverage, and finite scores between zero and each problem's maximum. Calculate totals on the server.
-5. Define persisted grading results, failure/retry states, and a policy preventing duplicate grades/completions when a job retries. Submissions currently remain ungraded indefinitely.
-6. Connect trusted scores to completion history and any recommendation inputs. Decide how repeat attempts affect displayed grades.
+```json
+{
+  "schema_version": 1,
+  "results": [
+    {"problem_id": "d9dd92ef-0b68-4ca8-a409-cf55ce92c73c", "points_awarded": 2.0,
+     "feedback": "Explain how both operands affect the truth value."}
+  ]
+}
+```
 
-`complete_assignment` currently records nonnegative total points and checks live
-assignment visibility/enrollment. It has no per-problem maximum check, submission
-link, or retry deduplication. Because it requires a live assignment, it cannot
-record a completion after that assignment is deleted, even though a saved snapshot
-can still supply grading context. Resolve this policy before wiring in a worker.
+Unknown, duplicate, or missing IDs; booleans/string scores; NaN/infinity; scores
+outside each problem's maximum; and missing/oversized feedback reject the whole
+response. Partial results never become a grade. Model-provided totals, maxima,
+or percentages are ignored. Points support fractional partial credit.
 
-The existing weakness analyzer expects separate `Question` and `Attempt` shapes
-with `question_id` and boolean `correct`; it does not consume homework submissions
-or partial-credit scores automatically. See the [architecture guide](architecture.md).
+The saved `grading_result` includes `schema_version`, `problems` (each with
+`problem_id`, `points_awarded`, `max_points`, `feedback`), `total_points`,
+`max_points`, a two-decimal `percentage`, `model`, and UTC `graded_at`.
+`grading_context` privately records the exact references/rubrics used. Student
+widgets render selected score/feedback fields, never the private context,
+snapshot references, raw response, prompt, or transport errors.
+
+## Failures, missing references, and retries
+
+| State | Meaning |
+| --- | --- |
+| `ungraded` | Saved, with no grading attempt yet (including legacy submissions). |
+| `grading` | A worker holds a ten-minute lease. An expired lease can be reclaimed. |
+| `graded` | A complete, validated result is persisted. Clicking again does not grade twice. |
+| `failed` | Service failure or invalid response/input; answers remain saved, with no fabricated zero. |
+| `blocked` | At least one professor reference is missing; no model request is made. |
+
+Students can retry their own submissions while still enrolled. Professors can
+grade submissions in classes they currently teach. Roles and ownership are checked
+against the database before claiming an attempt. Conditional writes with a unique
+token stop an expired worker from replacing a later worker's result.
+
+Use the immutable snapshot whenever it has references. If a snapshot is missing a
+reference, retry may use a newly supplied answer/rubric from the live assignment
+only when that problem's ID, question text, and points still match. It never
+replaces the saved question or maximum. This allows professors to supply an answer
+key after submission while keeping the original attempt intact.
+
+Grading is synchronous during submit/retry; there is no separate task worker.
+A process interruption or failed final database write leaves a reclaimable lease.
+Repeated homework submissions intentionally remain separate attempts. Existing
+graded attempts are not automatically regraded after a professor edits an answer.
+
+## Database setup and recommendation integration
+
+Before deploying to a database using the old ungraded-only validator, run:
+
+```javascript
+load("docs/assignment-validation.js")
+```
+
+Run this in `mongosh` after selecting the intended application database. The
+script upgrades the old application-owned status enum even when nested by older
+runs, preserves unrelated validation constraints, and adds result validation.
+It is repeatable and does not alter student answers or backfill grades. Do not
+combine the old `ungraded` enum with the new one without upgrading it: their
+intersection would reject every graded write. Custom validators can impose
+additional constraints and should be checked by the database operator.
+
+Recommendation adapters now read actual per-problem scores from graded homework
+alongside legacy `completed_assignments`. They use the saved problem topics and
+partial-credit ratios, including when the live assignment has since been deleted.
+Failed or ungraded attempts are excluded. This connects the grade data to the
+recommendation backend; recommendation widgets remain separate future UI work.
+Manual enrollment/class grades are still separate; AI grading does not overwrite
+them. Professor score overrides and grade history beyond separate attempts remain
+future work.
+
+Tests mock Rocky and MongoDB. A separate synthetic smoke check verified a correct
+and incorrect answer against `qwen3.8-27b`; no real student data or database writes
+were used. This checks the integration, not grading quality across a course.

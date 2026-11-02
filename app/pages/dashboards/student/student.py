@@ -11,7 +11,13 @@ from pymongo.errors import PyMongoError
 
 from db.student_dashboard import load_student_overview
 from pages.dashboards.dashboard import Dashboard
+from pages.dashboards.student.recently_visited import get_recent
 from rocky.rocky import rocky
+
+
+def open_homework(item_id):
+    st.session_state["homework_assignment_id"] = item_id
+    st.switch_page("pages/homework_assignment.py")
 
 # Creates one Rocky AI per login session
 def get_rocky():
@@ -112,8 +118,22 @@ class studentDash(Dashboard):
                 st.switch_page("app_pages/practice.py")
             if st.button("Ask Rocky", key="student_rocky_button", icon=":material/chat:"):
                 rocky_dialog()
+        self.render_recently_visited()
         with st.expander("Find learning resources", icon=":material/search:"):
             self.render_search()
+
+    def render_recently_visited(self):
+        st.subheader("Recently visited")
+        items = [item for item in get_recent() if item.get("kind") == "homework"]
+        if not items:
+            st.caption("Nothing here yet. Open an assignment!")
+            return
+        with st.container(horizontal=True, key="recent_scroller"):
+            for item in items:
+                with st.container(border=True, key=f"recentcard_homework_{item['item_id']}"):
+                    st.caption("Homework")
+                    if st.button(item["title"], key=f"recentbtn_homework_{item['item_id']}"):
+                        open_homework(item["item_id"])
 
     def render_search(self):
         st.caption("Searches the public web. Your query is sent to an external search service; homework is not sent automatically.")

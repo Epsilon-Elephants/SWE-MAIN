@@ -13,7 +13,8 @@ from db.assignments import (
     update_assignment,
     update_problem,
 )
-from db.homework_submissions import list_homework_submissions_for_professor
+from db.homework_submissions import list_submissions_for_assignment
+from homework.results import grading_action, grading_label, show_problem_result
 
 logger = logging.getLogger(__name__)
 
@@ -36,19 +37,19 @@ def _show_error(error):
 def _render_submissions(assignment_id, professor_id):
     st.markdown("**Submissions**")
     try:
-        rows = list_homework_submissions_for_professor(assignment_id, professor_id)
+        rows = list_submissions_for_assignment(assignment_id, professor_id)
     except (ValueError, RuntimeError, PyMongoError) as error:
         _show_error(error)
         return
     if not rows:
         st.info("No submissions yet.")
         return
-    st.caption(f"{len(rows)} submitted attempt(s). Scores will appear after grading is connected.")
+    st.caption(f"{len(rows)} submitted attempt{'s' if len(rows) != 1 else ''}.")
     st.dataframe([
         {"Student": _student_name(row.get("user")),
          "Email": (row.get("user") or {}).get("email", ""),
          "Submitted": _format_timestamp(row.get("submitted_at")),
-         "Grading": row.get("grading_status", "ungraded")}
+         "Grade": grading_label(row)}
         for row in rows
     ], hide_index=True, width="stretch")
     students = {}
@@ -71,15 +72,21 @@ def _render_submissions(assignment_id, professor_id):
         key=f"review_submission_{assignment_id}_{student_id}",
     )
     attempt = attempts[selected]
+    st.caption(grading_label(attempt))
     responses = {row["problem_id"]: row["answer"] for row in attempt.get("answers", [])}
     for number, problem in enumerate(attempt.get("assignment_snapshot", {}).get("problems", []), 1):
         with st.container(border=True):
             st.markdown(f"**Question {number}**")
             st.write(problem["content"])
             st.text(responses.get(problem["problem_id"], ""))
+            show_problem_result(attempt, problem["problem_id"])
             with st.expander("Instructor grading reference"):
                 st.write(problem.get("reference_answer") or "No reference answer recorded.")
                 st.write(problem.get("grading_guidance") or "No grading guidance recorded.")
+    try:
+        grading_action(attempt, professor_id)
+    except (ValueError, RuntimeError, PyMongoError):
+        st.error("Could not grade this saved submission. Please try again.")
 
 
 def show_assignment_editor(assignment_id, professor_id: str):
