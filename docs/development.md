@@ -28,9 +28,8 @@ caller loads it before constructing the client. Environment values take
 precedence over fallback values in Streamlit secrets. Do not put real credentials
 in `.env.example` or documentation; `.env` is ignored by Git.
 
-Streamlit deployments can supply the same keys through Streamlit secrets. If you
-create a local `.streamlit/secrets.toml`, keep it out of Git; the current
-`.gitignore` does not explicitly ignore that file.
+Streamlit deployments can supply the same keys through Streamlit secrets. A local
+`.streamlit/secrets.toml` is ignored by Git, like `.env`.
 
 ```bash
 python -m streamlit run app/app.py

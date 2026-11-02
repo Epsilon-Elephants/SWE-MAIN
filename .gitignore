@@ -9,3 +9,4 @@ test-results.xml
 .agents/skills/developing-with-streamlit
 .claude/skills/developing-with-streamlit
 /.idea
+.streamlit/secrets.toml
