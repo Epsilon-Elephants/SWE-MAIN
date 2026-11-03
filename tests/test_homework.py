@@ -182,12 +182,20 @@ def test_student_flow_from_dashboard_to_submission(homework):
         next(b for b in app.button if b.label == "Submit homework").click().run()
         assert app.error[0].value == "Answer every question before submitting."
         save.assert_not_called()
+        first_answer_key = (
+            f"homework_answer_{user_id}_{homework['_id']}_"
+            f"{homework['problems'][0]['problem_id']}"
+        )
         app.text_area[0].set_value("Both must be true.")
+        app.button(key=f"{first_answer_key}__logic_symbol_1").click().run()
+        assert not app.exception
+        assert app.text_area(key=first_answer_key).value == "Both must be true.∧"
         app.text_area[1].set_value("At least one must be true.")
         next(b for b in app.button if b.label == "Submit homework").click().run()
         assert not app.exception
         assert app.success
         assert len(history) == 1
+        assert history[0]["answers"][0]["answer"] == "Both must be true.∧"
         grade.assert_called_once_with(history[0]["_id"], user_id)
         assert all("PRIVATE ANSWER" not in e.value for e in [*app.markdown, *app.text, *app.caption])
         app.run()  # Ordinary reruns must never create extra attempts.
