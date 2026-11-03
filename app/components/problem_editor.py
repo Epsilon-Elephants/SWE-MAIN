@@ -5,6 +5,8 @@
 
 import streamlit as st
 
+from components.logic_symbol_editor import logic_symbol_editor
+
 
 # return problem content entered by the professor
 #   label: text shown next to the editor
@@ -15,10 +17,7 @@ import streamlit as st
 # contain text, unicode logic symbols, LaTeX, etc. The editor could be changed to
 # return a dictionary too
 def problem_editor(label: str, key: str, initial_content: str = "") -> str:
-    # temporary plain-text implementation
-    value = st.text_area(label, value=initial_content, key=key, height=160)
-    st.caption("Unicode logic symbols and LaTeX are welcome, for example: ¬ ∧ ∨ → ↔ ∀ ∃ ⊢ ⊨. Paste symbols directly into your question.")
-    return value
+    return logic_symbol_editor(label, key, initial_content)
 
 
 # Edit this function if logic symbols need special rendering. LaTeX content could use st.latex()
