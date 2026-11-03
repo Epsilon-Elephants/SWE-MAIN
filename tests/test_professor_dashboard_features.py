@@ -61,7 +61,7 @@ def test_reopening_validates_schedule_and_preserves_content():
     assignment_id, professor_id = ObjectId(), str(ObjectId())
     assignment = {
         "posted": date(2026, 11, 1), "due_date": date(2026, 11, 8),
-        "problems": [{"problem_id": "first", "content": "Solve this"}],
+        "problems": [{"problem_id": "first", "content": "Solve this", "topic": "Logic", "reference_answer": "Solution"}],
     }
     with patch.object(db, "read_one", return_value=assignment), patch.object(
         db, "update_one", return_value=SimpleNamespace(matched_count=1),
@@ -100,12 +100,11 @@ def test_overview_metrics_and_card_details():
     ), patch.object(db, "list_classes_page", return_value=([], False)):
         app = dashboard_app(professor_id).run()
     assert not app.exception
-    metrics = {metric.label: metric.value for metric in app.metric}
-    assert metrics == {"Open assignments": "2", "Due in 7 days": "1", "Past due": "1", "Total submissions": "4"}
+    assert not app.metric
+    assert app.button(key=f"professor_courses_{class_id}")
     captions = [caption.value for caption in app.caption]
-    assert any(c.startswith("Open · Logic · Due") and c.endswith("1 problem") for c in captions)
-    assert any(c.startswith("Past due · Logic") for c in captions)
-    assert "3 students submitted · 4 attempts" in captions
+    assert any("Logic · Due" in c and "1 question" in c and "3 submitted" in c for c in captions)
+    assert "Past due" in captions
 
 
 def editor_app(assignment_id, professor_id):
@@ -124,7 +123,7 @@ def test_editor_closes_and_reopens(status, label, new_status):
     assignment = {
         "professor_id": professor_id, "title": "Homework", "status": status,
         "posted": date(2026, 11, 1), "due_date": date(2026, 11, 8),
-        "problems": [{"problem_id": "first", "content": "Solve this"}],
+        "problems": [{"problem_id": "first", "content": "Solve this", "topic": "Logic", "reference_answer": "Solution"}],
     }
     with patch("pages.assignment_editor.get_assignment", return_value=assignment), patch(
         "pages.assignment_editor.set_assignment_status", return_value=True,
@@ -141,7 +140,7 @@ def test_saving_closed_assignment_keeps_it_closed():
     assignment = {
         "professor_id": professor_id, "title": "Homework", "status": "closed",
         "posted": date(2026, 11, 1), "due_date": date(2026, 11, 8),
-        "problems": [{"problem_id": "first", "content": "Solve this"}],
+        "problems": [{"problem_id": "first", "content": "Solve this", "topic": "Logic", "reference_answer": "Solution"}],
     }
     with patch("pages.assignment_editor.get_assignment", return_value=assignment), patch(
         "pages.assignment_editor.update_assignment", return_value=True,
@@ -157,7 +156,7 @@ def test_editor_lists_submissions():
     assignment = {
         "professor_id": professor_id, "title": "Homework", "status": "published",
         "posted": date(2026, 11, 1), "due_date": date(2026, 11, 8),
-        "problems": [{"problem_id": "first", "content": "Solve this"}],
+        "problems": [{"problem_id": "first", "content": "Solve this", "topic": "Logic", "reference_answer": "Solution"}],
     }
     rows = [{
         "_id": ObjectId(), "user_id": ObjectId(), "grading_status": "graded",
@@ -166,7 +165,7 @@ def test_editor_lists_submissions():
                                          "max_points": 10.0, "feedback": "Good reasoning."}]},
         "submitted_at": datetime(2026, 11, 5, 14, 30),
         "answers": [{"problem_id": "first", "answer": "Student response"}],
-        "assignment_snapshot": {"problems": [{"problem_id": "first", "content": "Solve this"}]},
+        "assignment_snapshot": {"problems": [{"problem_id": "first", "content": "Solve this", "topic": "Logic", "reference_answer": "Solution"}]},
         "user": {"first_name": "Grace", "last_name": "Hopper", "email": "grace@example.com"},
     }]
     with patch("pages.assignment_editor.get_assignment", return_value=assignment), patch(
@@ -174,12 +173,12 @@ def test_editor_lists_submissions():
     ):
         app = editor_app(assignment_id, professor_id).run()
     assert not app.exception
-    table = app.dataframe[0].value
-    assert list(table["Student"]) == ["Grace Hopper"]
-    assert list(table["Grade"]) == ["AI score: 7/10 points · 70%"]
-    assert list(table["Submitted"]) == ["Nov 05, 2026 14:30 UTC"]
-    assert "Student response" in [text.value for text in app.text]
-    assert "Good reasoning." in [text.value for text in app.text]
+    assert not app.dataframe
+    assert "Grace Hopper" in [row.value for row in app.markdown]
+    assert "AI score: 7/10 points · 70%" in [row.value for row in app.caption]
+    assert "Nov 05, 2026 14:30 UTC" in [row.value for row in app.caption]
+    assert app.button(key=f"review_submission_{rows[0]['_id']}").label == "Review and grade"
+    assert "Student response" not in [text.value for text in app.text]
 
 
 def test_submission_review_filters_attempts_when_student_changes():
@@ -195,39 +194,32 @@ def test_submission_review_filters_attempts_when_student_changes():
             "submitted_at": datetime(2026, 11, day, 14, 30),
             "user": {"first_name": "Grace", "last_name": "Hopper", "email": email},
             "answers": [{"problem_id": "first", "answer": answer}],
-            "assignment_snapshot": {"problems": [{"problem_id": "first", "content": "Solve this"}]},
+            "assignment_snapshot": {"problems": [{"problem_id": "first", "content": "Solve this", "topic": "Logic", "reference_answer": "Solution"}]},
         })
+    for row in rows:
+        row["assignment_snapshot"]["title"] = "Homework"
+        row["assignment_snapshot"]["problems"][0]["points"] = 1
+    by_id = {str(row["_id"]): row for row in rows}
     with patch("pages.assignment_editor.list_submissions_for_assignment", return_value=rows), patch(
-        "homework.results.grade_submission", return_value="graded",
-    ) as grade:
+        "homework.review_views.get_submission_for_review", side_effect=lambda sid, actor: by_id[sid],
+    ) as review, patch.object(db, "read_one", return_value={"first_name": "Student"}):
         app = AppTest.from_string('''
+import streamlit as st
 from pages.assignment_editor import _render_submissions
+from homework.review_views import REVIEW_SELECTION, review_submission_dialog
+st.session_state.setdefault("user", {"id": "professor", "permissions": "professor"})
 _render_submissions("assignment", "professor")
+if selection := st.session_state.get(REVIEW_SELECTION):
+    review_submission_dialog(selection["submission_id"], selection["revision"])
 ''').run()
         assert not app.exception
-        assert app.selectbox[0].options == [
-            "Grace Hopper · grace@example.com", "Grace Hopper · other@example.com",
-        ]
-        assert len(app.selectbox[1].options) == 2
-        assert "Latest response" in [text.value for text in app.text]
-
-        app.selectbox[1].select(str(rows[2]["_id"])).run()
-        assert not app.exception
-        assert "Earlier response" in [text.value for text in app.text]
-
-        app.selectbox[0].select(str(other_id)).run()
-        assert not app.exception
-        assert len(app.selectbox[1].options) == 1
-        assert app.selectbox[1].value == str(rows[1]["_id"])
-        assert [text.value for text in app.text] == ["Other student response"]
-        app.button(key=f"grade_submission_{rows[1]['_id']}").click().run()
-        assert not app.exception
-        grade.assert_called_once_with(rows[1]["_id"], "professor")
-
-        app.selectbox[0].select(str(student_id)).run()
-        assert not app.exception
-        assert len(app.selectbox[1].options) == 2
-        assert app.selectbox[1].value in {str(rows[0]["_id"]), str(rows[2]["_id"])}
+        for row in rows:
+            app.button(key=f"review_submission_{row['_id']}").click().run()
+            assert not app.exception
+            assert [text.value for text in app.text] == [row["answers"][0]["answer"]]
+            review.assert_called_with(str(row["_id"]), "professor")
+            app.button(key=f"close_review_{row['_id']}").click().run()
+            assert not app.exception
 
 
 def roster_app():
@@ -251,7 +243,7 @@ def test_roster_updates_grade_through_authorized_helper():
         app = roster_app().run()
         app.button(key=f"professor_class_{class_id}").click().run()
         assert not app.exception
-        listing.assert_called_with(str(class_id), enrolled=True, search="", page=0, page_size=10)
+        listing.assert_called_with(str(class_id), enrolled=True, search="", page=0, page_size=5)
         app.number_input(key=f"earned_{class_id}_{student_id}").set_value(8.0)
         next(button for button in app.button if button.label == "Save grade").click().run()
         assert not app.exception

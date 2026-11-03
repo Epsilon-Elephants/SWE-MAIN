@@ -4,26 +4,33 @@ st.set_page_config(page_title="Philosophy classroom", page_icon=":material/schoo
 st.session_state.setdefault("user", None)
 user = st.session_state.user or {}
 role = user.get("permissions")
+if role in {"student", "professor"}:
+    from homework.worker import start_grading_worker
+
+    start_grading_worker()
 
 with st.sidebar:
-    st.caption("TEACHING & LEARNING")
-    st.title("Philosophy classroom")
+    st.markdown("### Philosophy classroom")
     if user:
-        st.caption(" ".join(filter(None, [user.get("first_name"), user.get("last_name")])))
-        st.caption(user.get("email", ""))
-        st.badge(role.capitalize() if role else "Account", icon=":material/person:")
+        name = " ".join(filter(None, [user.get("first_name"), user.get("last_name")]))
+        st.caption((name or user.get("email", "Account")) + (f" · {role.capitalize()}" if role else ""))
 
 # Explicit role-scoped routes also prevent legacy pages/ auto-discovery.
-pages = [st.Page("app_pages/overview.py", title="Overview", icon=":material/dashboard:", default=True)]
+pages = [st.Page("app_pages/overview.py", title="Dashboard", icon=":material/dashboard:", default=True)]
+if role in {"professor", "student"}:
+    pages.extend([
+        st.Page("app_pages/classes.py", title="Courses", icon=":material/school:"),
+        st.Page("app_pages/course.py", title="Course", visibility="hidden"),
+    ])
 if role == "professor":
     pages.extend([
-        st.Page("app_pages/classes.py", title="Classes", icon=":material/groups:"),
-        st.Page("app_pages/create_assignment.py", title="Create assignment", icon=":material/add_circle:"),
+        st.Page("app_pages/assignments.py", title="Assignments", icon=":material/assignment:"),
+        st.Page("app_pages/create_assignment.py", title="Create assignment", visibility="hidden"),
         st.Page("app_pages/edit_assignment.py", title="Assignment editor", icon=":material/edit_note:", visibility="hidden"),
     ])
 if role == "student":
     pages.extend([
-        st.Page("app_pages/homework.py", title="Homework", icon=":material/assignment:"),
+        st.Page("app_pages/homework.py", title="Assignments", icon=":material/assignment:"),
         st.Page("app_pages/homework_assignment.py", title="Take assignment", icon=":material/edit_note:", visibility="hidden"),
         st.Page("app_pages/practice.py", title="Practice", icon=":material/psychology:"),
     ])

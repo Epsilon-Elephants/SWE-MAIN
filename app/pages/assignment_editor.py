@@ -14,7 +14,10 @@ from db.assignments import (
     update_problem,
 )
 from db.homework_submissions import list_submissions_for_assignment
-from homework.results import grading_action, grading_label, show_problem_result
+from homework.results import grading_label
+from homework.review_views import REVIEW_SELECTION, review_submission_dialog
+from components.compact_list import compact_list, close_compact_list
+from homework.schema import authored_problem, authored_problems
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +39,8 @@ def _show_error(error):
 
 def _render_submissions(assignment_id, professor_id):
     st.markdown("**Submissions**")
+    if message := st.session_state.pop("professor_grading_notice", None):
+        st.success(message)
     try:
         rows = list_submissions_for_assignment(assignment_id, professor_id)
     except (ValueError, RuntimeError, PyMongoError) as error:
@@ -45,54 +50,27 @@ def _render_submissions(assignment_id, professor_id):
         st.info("No submissions yet.")
         return
     st.caption(f"{len(rows)} submitted attempt{'s' if len(rows) != 1 else ''}.")
-    st.dataframe([
-        {"Student": _student_name(row.get("user")),
-         "Email": (row.get("user") or {}).get("email", ""),
-         "Submitted": _format_timestamp(row.get("submitted_at")),
-         "Grade": grading_label(row)}
-        for row in rows
-    ], hide_index=True, width="stretch")
-    students = {}
-    for row in rows:
-        students.setdefault(str(row["user_id"]), []).append(row)
-
-    def student_label(student_id):
-        user = students[student_id][0].get("user") or {}
-        email = user.get("email")
-        return f"{_student_name(user)} · {email}" if email else _student_name(user)
-
-    student_id = st.selectbox(
-        "Student", options=list(students), format_func=student_label,
-        key=f"review_student_{assignment_id}",
-    )
-    attempts = {str(row["_id"]): row for row in students[student_id]}
-    selected = st.selectbox(
-        "Submission", options=list(attempts),
-        format_func=lambda attempt_id: f"{_format_timestamp(attempts[attempt_id].get('submitted_at'))} · {attempt_id[-6:]}",
-        key=f"review_submission_{assignment_id}_{student_id}",
-    )
-    attempt = attempts[selected]
-    st.caption(grading_label(attempt))
-    responses = {row["problem_id"]: row["answer"] for row in attempt.get("answers", [])}
-    for number, problem in enumerate(attempt.get("assignment_snapshot", {}).get("problems", []), 1):
+    def render_attempt(attempt):
         with st.container(border=True):
-            st.markdown(f"**Question {number}**")
-            st.write(problem["content"])
-            st.text(responses.get(problem["problem_id"], ""))
-            show_problem_result(attempt, problem["problem_id"])
-            with st.expander("Instructor grading reference"):
-                st.write(problem.get("reference_answer") or "No reference answer recorded.")
-                st.write(problem.get("grading_guidance") or "No grading guidance recorded.")
-    try:
-        grading_action(attempt, professor_id)
-    except (ValueError, RuntimeError, PyMongoError):
-        st.error("Could not grade this saved submission. Please try again.")
+            identity, score, action = st.columns([3, 2, 2], vertical_alignment="center")
+            identity.write(_student_name(attempt.get('user')))
+            identity.caption(_format_timestamp(attempt.get('submitted_at')))
+            score.caption(grading_label(attempt))
+            if action.button("Review and grade", key=f"review_submission_{attempt['_id']}", icon=":material/grading:"):
+                close_compact_list()
+                st.session_state[REVIEW_SELECTION] = {
+                    "assignment_id": str(assignment_id), "submission_id": str(attempt["_id"]),
+                    "revision": attempt.get("professor_grade_revision", 0),
+                }
+                st.rerun()
+    compact_list(rows, render_attempt, title="More submissions", key=f"professor_submissions_{assignment_id}")
 
 
 def show_assignment_editor(assignment_id, professor_id: str):
-    if st.button("Back to assignments", key="back_to_assignments"):
+    return_page = st.session_state.get("professor_assignment_return_page", "app_pages/assignments.py")
+    if st.button("Back to course" if return_page == "app_pages/course.py" else "Back to assignments", key="back_to_assignments"):
         st.session_state.pop("selected_assignment_id", None)
-        st.switch_page("app_pages/overview.py")
+        st.switch_page(return_page)
 
     try:
         assignment = get_assignment(assignment_id)
@@ -106,12 +84,12 @@ def show_assignment_editor(assignment_id, professor_id: str):
 
     assignment_key = str(assignment_id)
     current_status = assignment.get("status", "draft")
-    st.subheader("Assignment editor")
+    st.title(assignment.get("title", "Assignment"))
     st.caption(f"Status: {current_status.capitalize()}")
     if message := st.session_state.pop("professor_assignment_success", None):
         st.success(message)
     is_draft = assignment.get("status", "draft") == "draft"
-    st.caption("Save changes to individual problems below before posting or finishing later.")
+    st.caption("Save each question before switching questions or publishing the assignment.")
 
     details_tab, problems_tab, submissions_tab = st.tabs(["Details", "Problems", "Submissions"])
     with details_tab:
@@ -144,6 +122,8 @@ def show_assignment_editor(assignment_id, professor_id: str):
                 status = current_status if finish_later or current_status == "closed" else "published"
                 if status != "draft" and not assignment.get("problems"):
                     raise ValueError("At least one problem is required. Add a problem before saving.")
+                if status != "draft":
+                    authored_problems(assignment["problems"])
                 saved = update_assignment(
                     assignment_id,
                     professor_id,
@@ -160,41 +140,45 @@ def show_assignment_editor(assignment_id, professor_id: str):
                 )
                 if finish_later:
                     st.session_state.pop("selected_assignment_id", None)
-                    st.switch_page("app_pages/overview.py")
+                    st.switch_page(return_page)
                 st.rerun()
             except (ValueError, RuntimeError, PyMongoError) as error:
                 _show_error(error)
 
-        if current_status == "published":
-            status_label, new_status = "Close assignment", "closed"
-        elif current_status == "closed":
-            status_label, new_status = "Reopen assignment", "published"
-        else:
-            status_label = new_status = None
-        if status_label and st.button(status_label, key=f"status_{assignment_key}"):
-            try:
-                set_assignment_status(assignment_id, professor_id, new_status)
-            except (ValueError, RuntimeError, PyMongoError) as error:
-                _show_error(error)
+        with st.expander("Assignment settings"):
+            if current_status == "published":
+                status_label, new_status = "Close assignment", "closed"
+            elif current_status == "closed":
+                status_label, new_status = "Reopen assignment", "published"
             else:
-                st.rerun()
+                status_label = new_status = None
+            if status_label and st.button(status_label, key=f"status_{assignment_key}"):
+                try:
+                    set_assignment_status(assignment_id, professor_id, new_status)
+                except (ValueError, RuntimeError, PyMongoError) as error:
+                    _show_error(error)
+                else:
+                    st.rerun()
 
-        confirm_delete = st.checkbox("Confirm assignment deletion")
-        if st.button("Delete assignment", disabled=not confirm_delete):
-            try:
-                if delete_assignment(assignment_id, professor_id):
-                    st.session_state.pop("selected_assignment_id", None)
-                    st.switch_page("app_pages/overview.py")
-            except (ValueError, RuntimeError, PyMongoError) as error:
-                _show_error(error)
+            confirm_delete = st.checkbox("Confirm assignment deletion")
+            if st.button("Delete assignment", disabled=not confirm_delete):
+                try:
+                    if delete_assignment(assignment_id, professor_id):
+                        st.session_state.pop("selected_assignment_id", None)
+                        st.switch_page(return_page)
+                except (ValueError, RuntimeError, PyMongoError) as error:
+                    _show_error(error)
 
 
     with problems_tab:
-        st.markdown("**Problems**")
+        problems = assignment.get("problems", [])
+        problem_options = [problem["problem_id"] for problem in problems] + ["new"]
+        labels = {problem["problem_id"]: f"Question {number} · {problem['content'][:70]}" for number, problem in enumerate(problems, 1)}
+        selected_problem = st.selectbox("Question", problem_options, format_func=lambda value: labels.get(value, "+ Add a question"), key=f"selected_problem_{assignment_key}")
 
         for number, problem in enumerate(assignment.get("problems", []), start=1):
             problem_id = problem.get("problem_id")
-            if not problem_id:
+            if not problem_id or problem_id != selected_problem:
                 continue
 
             with st.form(f"problem_{assignment_key}_{problem_id}"):
@@ -215,7 +199,7 @@ def show_assignment_editor(assignment_id, professor_id: str):
                         assignment_id,
                         professor_id,
                         problem_id,
-                        problem_fields,
+                        authored_problem(problem_fields, problem_id=problem_id),
                     )
                     st.rerun()
                 if remove_problem:
@@ -224,21 +208,21 @@ def show_assignment_editor(assignment_id, professor_id: str):
             except (ValueError, RuntimeError, PyMongoError) as error:
                 _show_error(error)
 
-        with st.form(f"new_problem_{assignment_key}", clear_on_submit=True):
-            new_content = problem_editor(
-                "New problem",
-                key=f"new_content_{assignment_key}",
-            )
-            new_fields = grading_fields(new_content)
-            add_submitted = st.form_submit_button("Add problem")
-
-        if add_submitted:
-            try:
-                add_problem(assignment_id, professor_id, new_fields)
-                st.rerun()
-            except (ValueError, RuntimeError, PyMongoError) as error:
-                _show_error(error)
+        if selected_problem == "new":
+            with st.form(f"new_problem_{assignment_key}", clear_on_submit=False):
+                new_content = problem_editor("New problem", key=f"new_content_{assignment_key}")
+                new_fields = grading_fields(new_content)
+                add_submitted = st.form_submit_button("Add problem")
+            if add_submitted:
+                try:
+                    add_problem(assignment_id, professor_id, authored_problem(new_fields))
+                    st.rerun()
+                except (ValueError, RuntimeError, PyMongoError) as error:
+                    _show_error(error)
 
 
     with submissions_tab:
         _render_submissions(assignment_id, professor_id)
+    selection = st.session_state.get(REVIEW_SELECTION)
+    if selection and selection["assignment_id"] == str(assignment_id):
+        review_submission_dialog(selection["submission_id"], selection["revision"])

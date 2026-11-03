@@ -23,17 +23,18 @@ def test_professor_account_page_back_and_logout():
     ), patch.object(db, "list_classes_page", return_value=([], False)):
         app.run()
         assert not app.exception
-        app.button(key="dashboard_settings_open").click().run()
+        app.switch_page("app_pages/settings.py").run()
         assert not app.exception
         assert app.title[0].value == "Settings"
         assert app.text_input[1].value == "ada@example.com"
         app.switch_page("app_pages/settings.py").run()
         app.button(key="settings_back").click().run()
         assert not app.exception
-        assert app.title[0].value == "Professor Dashboard"
+        assert app.title[0].value == "Dashboard"
         assert app.session_state.selected_assignment_id == "assignment-id"
         app.switch_page("app_pages/settings.py").run()
-        app.button(key="settings_logout").click().run()
+        assert not any(button.label == "Log out" for button in app.main.button)
+        app.sidebar.button(key="account_logout").click().run()
         assert not app.exception
         assert "selected_assignment_id" not in app.session_state
         assert app.session_state.user is None

@@ -2,6 +2,7 @@
 from db.DataBase import db
 from db.assignments import list_assignments_for_student
 from db.homework_submissions import list_submissions_for_student
+from homework.study import submission_recommendations
 
 
 def load_student_overview(user_id):
@@ -18,7 +19,7 @@ def load_student_overview(user_id):
     submitted = {row["assignment_id"] for row in submissions}
     return {
         "classes": [
-            {"Class": classes.get(row["class_id"], "Class unavailable"),
+            {"_id": row["class_id"], "Class": classes.get(row["class_id"], "Class unavailable"),
              "Earned points": (row.get("grade") or {}).get("earned", 0),
              "Possible points": (row.get("grade") or {}).get("possible", 0)}
             for row in memberships
@@ -30,5 +31,7 @@ def load_student_overview(user_id):
             for row in assignments
         ],
         "attempts": len(submissions),
-        "awaiting_grading": sum(row.get("grading_status") == "ungraded" for row in submissions),
+        "awaiting_grading": sum(row.get("grading_status") in {"ungraded", "grading", "blocked"}
+                                 or bool(row.get("grading_retry_at")) for row in submissions),
+        "recommendations": submission_recommendations(submissions),
     }

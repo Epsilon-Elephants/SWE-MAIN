@@ -17,7 +17,6 @@ import streamlit as st
 def problem_editor(label: str, key: str, initial_content: str = "") -> str:
     # temporary plain-text implementation
     value = st.text_area(label, value=initial_content, key=key, height=160)
-    st.caption("Unicode logic symbols and LaTeX are welcome, for example: ¬ ∧ ∨ → ↔ ∀ ∃ ⊢ ⊨. Paste symbols directly into your question.")
     return value
 
 
@@ -29,16 +28,21 @@ def display_problem(content: str):
 def grading_fields(content: str, problem=None):
     """Instructor-only fields for the versioned short-answer problem contract."""
     problem = problem or {}
-    points = st.number_input("Points", min_value=0.01, value=float(problem.get("points", 1.0)), step=1.0)
-    topic = st.text_input("Topic", value=problem.get("topic", ""))
+    st.caption("Required: question, points, topic, and professor reference answer.")
+    points_column, topic_column = st.columns([1, 3])
+    points = points_column.number_input("Points", min_value=0.01, value=float(problem.get("points", 1.0)), step=1.0)
+    topic = topic_column.text_input("Topic", value=problem.get("topic", ""), placeholder="Required · e.g. Propositional logic")
     reference_answer = st.text_area(
         "Reference answer (private)", value=problem.get("reference_answer", ""),
-        help="Required for Rocky grading. Students cannot see this field.",
+        placeholder="Required · enter a correct answer or worked solution",
+        help="Required. Only professors and Rocky can see this answer.",
     )
-    grading_guidance = st.text_area(
-        "Grading guidance (private)", value=problem.get("grading_guidance", ""),
-        help="Optional criteria and partial-credit guidance for Rocky grading.",
-    )
+    with st.expander("Partial-credit criteria (optional)", expanded=bool(problem.get("grading_guidance"))):
+        grading_guidance = st.text_area(
+            "Grading guidance (private)", value=problem.get("grading_guidance", ""),
+            placeholder="Leave blank to let Rocky decide partial credit",
+            help="Optional. When blank, Rocky awards reasonable partial credit for correct reasoning and intermediate steps, up to the question's points.",
+        )
     return {
         "content": content, "points": points, "topic": topic,
         "reference_answer": reference_answer, "grading_guidance": grading_guidance,

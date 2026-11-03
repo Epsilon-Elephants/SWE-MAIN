@@ -4,6 +4,7 @@ import streamlit as st
 from pymongo.errors import PyMongoError
 
 from db.DataBase import db
+from components.compact_list import close_compact_list
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +25,7 @@ def _render_roster(class_id, professor_id):
     page = st.session_state.get("professor_roster_page", 0)
     try:
         students, has_next = db.list_students_for_class(
-            class_id, enrolled=True, search=search, page=page, page_size=10,
+            class_id, enrolled=True, search=search, page=page, page_size=5,
         )
     except (ValueError, RuntimeError, PyMongoError):
         logger.exception("Failed to load roster")
@@ -103,7 +104,7 @@ def _manage_class(class_id, professor_id):
     page = st.session_state.get("professor_student_page", 0)
     try:
         students, has_next = db.list_students_for_class(
-            class_id, enrolled=False, search=search, page=page, page_size=10,
+            class_id, enrolled=False, search=search, page=page, page_size=5,
         )
     except (ValueError, RuntimeError, PyMongoError):
         logger.exception("Failed to load students")
@@ -138,6 +139,49 @@ def _manage_class(class_id, professor_id):
         st.rerun()
 
 
+def _class_card(classroom):
+    class_id = str(classroom["_id"])
+    with st.container(border=True):
+        st.markdown(f"**{classroom['name']}**")
+        st.caption("Active class")
+        if st.button("Open roster", key=f"professor_class_{class_id}"):
+            close_compact_list()
+            st.session_state.pop("professor_classes_more", None)
+            st.session_state.professor_student_page = 0
+            st.session_state.professor_roster_page = 0
+            st.session_state.pop(f"professor_class_section_{class_id}", None)
+            st.session_state.pop("professor_enrollment_success", None)
+            st.session_state.professor_enrollment_class = class_id
+            st.rerun()
+
+
+def _dismiss_more_classes():
+    st.session_state.pop("professor_classes_more", None)
+
+
+def _class_page(offset):
+    st.session_state.professor_class_page += offset
+
+
+@st.dialog("More classes", width="large", on_dismiss=_dismiss_more_classes)
+def _more_classes(professor_id, search):
+    page = st.session_state.get("professor_class_page", 1)
+    try:
+        classes, has_next = db.list_classes_page(search, page, 5, instructor_id=professor_id, active_only=True)
+    except (ValueError, RuntimeError, PyMongoError):
+        st.error("Could not load your classes. Try again.")
+        return
+    st.caption(f"Page {page + 1} · Up to five classes per page")
+    for classroom in classes:
+        _class_card(classroom)
+    with st.container(horizontal=True):
+        st.button("Previous", disabled=page <= 1, key="professor_classes_previous", on_click=_class_page, args=(-1,))
+        st.button("Next", disabled=not has_next, key="professor_classes_next", on_click=_class_page, args=(1,))
+        if st.button("Close", key="professor_classes_close_more"):
+            _dismiss_more_classes()
+            st.rerun()
+
+
 def render_professor_classes(professor_id):
     if (st.session_state.get("user") or {}).get("permissions") != "professor":
         st.error("You must be a professor to manage your classes.")
@@ -148,10 +192,10 @@ def render_professor_classes(professor_id):
     if st.session_state.get("professor_class_settings") != settings:
         st.session_state.professor_class_settings = settings
         st.session_state.professor_class_page = 0
-    page = st.session_state.get("professor_class_page", 0)
+        _dismiss_more_classes()
     try:
         classes, has_next = db.list_classes_page(
-            search, page, 10, instructor_id=professor_id, active_only=True,
+            search, 0, 5, instructor_id=professor_id, active_only=True,
         )
     except (ValueError, RuntimeError, PyMongoError):
         logger.exception("Failed to load professor classes")
@@ -160,25 +204,12 @@ def render_professor_classes(professor_id):
     if not classes:
         st.info("No active classes found.")
     for classroom in classes:
-        class_id = str(classroom["_id"])
-        with st.container(border=True):
-            st.markdown(f"**{classroom['name']}**")
-            st.caption("Active class")
-            if st.button("Open roster", key=f"professor_class_{class_id}"):
-                st.session_state.professor_student_page = 0
-                st.session_state.professor_roster_page = 0
-                st.session_state.pop(f"professor_class_section_{class_id}", None)
-                st.session_state.pop("professor_enrollment_success", None)
-                st.session_state.professor_enrollment_class = class_id
-    if page or has_next:
-        st.caption(f"Page {page + 1}")
-        previous, following = st.columns(2)
-        if previous.button("Previous", disabled=page == 0, key="professor_classes_previous"):
-            st.session_state.professor_class_page = page - 1
-            st.rerun()
-        if following.button("Next", disabled=not has_next, key="professor_classes_next"):
-            st.session_state.professor_class_page = page + 1
-            st.rerun()
+        _class_card(classroom)
+    if has_next and st.button("See more classes", key="professor_classes_see_more"):
+        st.session_state.professor_class_page = 1
+        st.session_state.professor_classes_more = True
+    if st.session_state.get("professor_classes_more"):
+        _more_classes(professor_id, search)
 
     if class_id := st.session_state.get("professor_enrollment_class"):
         _manage_class(class_id, professor_id)
