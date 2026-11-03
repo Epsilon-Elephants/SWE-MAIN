@@ -106,6 +106,8 @@ const homeworkSubmissionValidator = {
       grading_token: { bsonType: "string" },
       grading_started_at: { bsonType: "date" },
       grading_lease_until: { bsonType: "date" },
+      grading_attempts: { bsonType: ["int", "long"], minimum: 0 },
+      grading_retry_at: { bsonType: ["date", "null"] },
       grading_result: {
         bsonType: "object",
         required: ["schema_version", "problems", "total_points", "max_points", "percentage", "model", "graded_at"],
@@ -125,6 +127,7 @@ const homeworkSubmissionValidator = {
                 points_awarded: { bsonType: ["double", "int", "long"], minimum: 0, maximum: Number.MAX_VALUE },
                 max_points: { bsonType: ["double", "int", "long"], minimum: 0, exclusiveMinimum: true, maximum: Number.MAX_VALUE },
                 feedback: { bsonType: "string", pattern: "\\S", maxLength: 2000 },
+                study_recommendation: { bsonType: "string", pattern: "\\S", maxLength: 1000 },
               },
             },
           },
@@ -172,6 +175,17 @@ const homeworkSubmissionValidator = {
   },
 };
 
+homeworkSubmissionValidator.$jsonSchema.properties.professor_grade = {
+  bsonType: ["object", "null"],
+  required: ["schema_version", "problems", "total_points", "max_points", "percentage", "graded_at", "graded_by", "reason"],
+  properties: {
+    ...homeworkSubmissionValidator.$jsonSchema.properties.grading_result.properties,
+    graded_by: { bsonType: "objectId" },
+    reason: { bsonType: "string", pattern: "\\S", maxLength: 2000 },
+  },
+};
+homeworkSubmissionValidator.$jsonSchema.properties.professor_grade_revision = { bsonType: ["int", "long"], minimum: 0 };
+
 addAssignmentValidator("homework_submissions", {
   $and: [homeworkSubmissionValidator, {
     $or: [
@@ -182,5 +196,6 @@ addAssignmentValidator("homework_submissions", {
 });
 db.homework_submissions.createIndex({ user_id: 1, assignment_id: 1, submitted_at: -1 });
 db.homework_submissions.createIndex({ assignment_id: 1, submitted_at: -1, _id: -1 });
+db.homework_submissions.createIndex({ grading_status: 1, submitted_at: 1 });
 db.assignments.createIndex({ professor_id: 1, due_date: 1 });
 db.assignments.createIndex({ class_id: 1, status: 1, posted: 1 });

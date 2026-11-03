@@ -14,6 +14,7 @@ from streamlit.testing.v1 import AppTest
 from db.DataBase import db
 from db.homework_submissions import list_submissions_for_assignment, submit_homework
 from homework.grading import grade_submission
+from homework.worker import process_next_submission
 from homework.schema import normalize_problems
 from rocky.grading import InvalidGrade, build_grading_prompt, validate_grading_response
 
@@ -82,8 +83,11 @@ class MemoryDB:
                 return False
         return True
 
-    def read_one(self, name, query):
-        return copy.deepcopy(next((doc for doc in self.collections[name] if self.matches(doc, query)), None))
+    def read_one(self, name, query, *, sort=None):
+        rows = [doc for doc in self.collections[name] if self.matches(doc, query)]
+        if sort:
+            rows.sort(key=lambda doc: tuple(doc[field] for field, _ in sort))
+        return copy.deepcopy(next(iter(rows), None))
 
     def find(self, name, query):
         return copy.deepcopy([doc for doc in self.collections.get(name, []) if self.matches(doc, query)])
@@ -282,6 +286,10 @@ def test_student_submit_displays_saved_problem_grades_and_does_not_grade_on_reru
     app.text_area[1].set_value("At least one.")
     next(button for button in app.button if button.label == "Submit homework").click().run()
     assert not app.exception
+    assert "Processing" in app.success[0].value
+    assert client.calls == 0
+    assert process_next_submission()
+    app.run()
     assert "75%" in app.success[0].value
     assert "Correct reasoning." in [row.value for row in app.text]
     assert any("1/2 points" in row.value for row in app.caption)
@@ -314,7 +322,7 @@ def test_new_grades_feed_student_and_class_recommendations(memory):
 
 def test_student_can_retry_saved_failed_attempt_in_ui(memory, monkeypatch):
     sid = memory.submit()
-    assert grade_submission(sid, memory.student, rocky_client=GradingClient(RuntimeError())) == "failed"
+    assert grade_submission(sid, memory.student, rocky_client=GradingClient("invalid JSON")) == "failed"
     client = GradingClient()
     from homework import grading
     real_grade = grading.grade_with_rocky
@@ -327,6 +335,10 @@ def test_student_can_retry_saved_failed_attempt_in_ui(memory, monkeypatch):
     assert any("could not finish grading" in warning.value for warning in app.warning)
     app.button(key=f"grade_submission_{sid}").click().run()
     assert not app.exception
+    assert client.calls == 0
+    assert "Processing" in app.success[0].value
+    assert process_next_submission()
+    app.run()
     assert "75%" in app.success[0].value
     assert client.calls == 1
     assert len(memory.collections["homework_submissions"]) == 1
@@ -336,6 +348,7 @@ def test_professor_can_grade_actual_saved_attempt(memory, monkeypatch):
     from pages import assignment_editor
     from homework import grading
     sid = memory.submit()
+    memory.collections["homework_submissions"][0].update(grading_status="failed", grading_error="invalid_response")
     row = copy.deepcopy(memory.collections["homework_submissions"][0])
     row["user"] = {"first_name": "Student", "email": "student@example.com"}
     monkeypatch.setattr(assignment_editor, "list_submissions_for_assignment", lambda *args: [row])
@@ -345,10 +358,16 @@ def test_professor_can_grade_actual_saved_attempt(memory, monkeypatch):
     app = AppTest.from_string(f'''
 from pages.assignment_editor import show_assignment_editor
 show_assignment_editor("{memory.assignment_id}", "{memory.professor}")
-''').run()
+''')
+    app.session_state["user"] = {"id": str(memory.professor), "permissions": "professor"}
+    app.run()
+    assert not app.exception
+    app.button(key=f"review_submission_{sid}").click().run()
     assert not app.exception
     app.button(key=f"grade_submission_{sid}").click().run()
     assert not app.exception
+    assert client.calls == 0
+    assert process_next_submission()
     assert memory.collections["homework_submissions"][0]["grading_status"] == "graded"
     assert client.calls == 1
 
@@ -371,7 +390,7 @@ def test_lost_database_write_keeps_answers_and_expired_attempt_can_recover(memor
 def test_student_is_told_work_is_saved_when_grading_persistence_fails(memory, monkeypatch):
     def unavailable(*args, **kwargs):
         raise RuntimeError("PRIVATE database failure")
-    monkeypatch.setattr("homework.views.grade_submission", unavailable)
+    monkeypatch.setattr("homework.grading.grade_with_rocky", unavailable)
     app = AppTest.from_file(str(Path(__file__).resolve().parents[1] / "app/app.py"))
     app.session_state["user"] = {"id": str(memory.student), "permissions": "student", "first_name": "Student"}
     app.session_state["homework_assignment_id"] = str(memory.assignment_id)
@@ -381,6 +400,94 @@ def test_student_is_told_work_is_saved_when_grading_persistence_fails(memory, mo
     app.text_area[1].set_value("At least one.")
     next(button for button in app.button if button.label == "Submit homework").click().run()
     assert not app.exception
-    assert any("Your homework is saved" in row.value for row in app.warning)
+    assert "Processing" in app.success[0].value
     assert all("PRIVATE" not in row.value for row in [*app.warning, *app.error])
     assert len(memory.collections["homework_submissions"]) == 1
+
+
+def test_grading_saves_topic_recommendations_in_the_same_model_request(memory):
+    from db.student_dashboard import load_student_overview
+    assignment = memory.collections["assignments"][0]
+    assignment["problems"][0]["topic"] = "Conjunction"
+    assignment["problems"][1]["topic"] = "Disjunction"
+    sid = memory.submit()
+    response = json.loads(GradingClient().response)
+    response["results"][0]["study_recommendation"] = "Practice distinguishing inclusive and exclusive disjunction with truth tables."
+    client = GradingClient(json.dumps(response))
+    assert process_next_submission(rocky_client=client)
+    saved = memory.collections["homework_submissions"][0]
+    assert saved["_id"] == sid
+    assert client.calls == 1
+    assert "study_recommendation" in client.payload
+    assert "Extend your work on Conjunction" in saved["grading_result"]["problems"][0]["study_recommendation"]
+    overview = load_student_overview(memory.student)
+    assert [item["topic"] for item in overview["recommendations"]] == ["Disjunction", "Conjunction"]
+    assert "inclusive and exclusive" in overview["recommendations"][0]["recommendation"]
+    assert "PRIVATE" not in json.dumps(overview, default=str)
+
+
+@pytest.mark.parametrize("suggestion", [None, "", " ", 123, "x" * 1001])
+def test_bad_optional_recommendations_do_not_discard_valid_scores(memory, suggestion):
+    response = json.loads(GradingClient().response)
+    response["results"][0]["study_recommendation"] = suggestion
+    sid = memory.submit()
+    assert grade_submission(sid, memory.student, rocky_client=GradingClient(json.dumps(response))) == "graded"
+    result = memory.collections["homework_submissions"][0]["grading_result"]
+    assert result["percentage"] == 75
+    assert "solve two new examples" in result["problems"][1]["study_recommendation"]
+
+
+def test_recommendations_follow_latest_attempt_and_professor_override(memory):
+    from homework.study import submission_recommendations
+    from homework.review import save_professor_grade
+    memory.collections["assignments"][0]["problems"][0]["topic"] = "Conjunction"
+    sid = memory.submit()
+    grade_submission(sid, memory.student, rocky_client=GradingClient())
+    saved = memory.collections["homework_submissions"][0]
+    save_professor_grade(sid, memory.professor, {"first": 0, "second": 0},
+                         {"first": "Explain the truth cases.", "second": "Review the distinction."},
+                         "PRIVATE REASON", expected_revision=0)
+    recommendations = submission_recommendations([saved])
+    assert recommendations[0]["ratio"] == 0
+    assert "Focus your next practice on Conjunction" in recommendations[0]["recommendation"]
+    assert "PRIVATE" not in repr(recommendations)
+    original = copy.deepcopy(saved)
+    original["submitted_at"] -= timedelta(days=1)
+    original["professor_grade"] = None
+    assert submission_recommendations([original, saved])[0]["ratio"] == 0
+
+
+def test_overflow_submission_opens_professor_review_without_nested_dialogs(memory, monkeypatch):
+    from pages import assignment_editor
+    for _ in range(6):
+        memory.submit()
+    rows = copy.deepcopy(memory.collections["homework_submissions"])
+    for row in rows:
+        row["user"] = {"first_name": "Student"}
+    monkeypatch.setattr(assignment_editor, "list_submissions_for_assignment", lambda *args: rows)
+    app = AppTest.from_string(f'''
+from pages.assignment_editor import show_assignment_editor
+show_assignment_editor("{memory.assignment_id}", "{memory.professor}")
+''')
+    app.session_state.user = {"id": str(memory.professor), "permissions": "professor"}
+    app.run()
+    assert not app.exception
+    assert len([button for button in app.button if button.label == "Review and grade"]) == 5
+    app.button(key=f"professor_submissions_{memory.assignment_id}_see_more").click().run()
+    assert not app.exception
+    app.button(key=f"review_submission_{rows[-1]['_id']}").click().run()
+    assert not app.exception
+    assert "Both true." in [row.value for row in app.text]
+    assert "expanded_list" not in app.session_state
+
+
+def test_automatic_outage_retry_recovers_and_publishes_recommendations(memory):
+    memory.collections["assignments"][0]["problems"][0]["topic"] = "Conjunction"
+    memory.submit()
+    saved = memory.collections["homework_submissions"][0]
+    assert process_next_submission(rocky_client=GradingClient(RuntimeError()), now=NOW)
+    assert saved["grading_status"] == "failed"
+    assert not process_next_submission(rocky_client=GradingClient(), now=NOW + timedelta(seconds=29))
+    assert process_next_submission(rocky_client=GradingClient(), now=NOW + timedelta(seconds=30))
+    assert saved["grading_status"] == "graded"
+    assert "Conjunction" in saved["grading_result"]["problems"][0]["study_recommendation"]

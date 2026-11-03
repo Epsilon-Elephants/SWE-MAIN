@@ -4,6 +4,31 @@ The app runs in Streamlit with MongoDB persistence and a Rocky HTTP client.
 There is no separate application API server in this repository: page code calls
 Python helpers directly.
 
+## Course workflow
+
+The interface follows the course-card and course-navigation organization of
+[Canvas's dashboard](https://community.instructure.com/en/kb/articles/664620-how-do-i-use-the-dashboard)
+and [course home](https://community.instructure.com/en/kb/articles/661274-how-do-i-use-the-course-home-page-as-a-student).
+The global sidebar contains Dashboard, Courses, Assignments, and Account (plus
+student Practice). Creation/editing and individual course pages are registered
+hidden routes, reached from their course or assignment.
+
+Dashboards emphasize course cards with a narrow To do panel rather than stacking
+metrics, assignment descriptions, rosters, and grades together. Each course has
+Assignments and Grades, with People for professors. Current database role and
+class ownership/enrollment are checked before course data is read. Students see
+only their own course submissions; professors can open grading review from the
+course grade list. Existing manually recorded class grades appear in student
+course Grades and remain separate from AI assignment scores.
+
+Assignment hubs use searchable rows and a selected group rather than listing
+every group at once. The professor editor selects one question at a time;
+optional partial-credit criteria are collapsed. Submission review has one row
+per attempt and one grading popup, without a duplicate summary table. Student
+submission details select one attempt. Lists remain bounded to five entries
+with overflow popups. Course helpers live in `app/courses/views.py`, outside the
+legacy `pages/` directory, to avoid page-name collisions on refresh.
+
 ## Main modules
 
 | Location | Responsibility |
@@ -65,6 +90,21 @@ Answers are saved before the model call. Missing references block grading;
 service/validation failures preserve answers without assigning a zero. The
 student Rocky dialog remains a separate question-and-answer interaction.
 
+`app/homework/worker.py` processes saved attempts independently of student
+sessions, with leases and automatic retry scheduling. Grading also produces a
+bounded practice suggestion per problem; `app/homework/study.py` supplies fallback
+guidance and builds topic-based overview recommendations from published grades.
+`app/homework/grades.py` chooses the professor override when present, preserving
+the original AI result. Professor review and overrides use an authorized dialog
+and revision checks.
+
+`app/components/compact_list.py` renders five entries plus a See more popup with
+five entries per page. Navigation actions close the list popup before opening a
+different view/dialog. Professor class and roster browsers also use pages of five,
+with database paging for people. `.streamlit/config.toml` provides selectable
+light/dark variants through Streamlit's native settings. Sidebar logout clears
+all user session state; the Account page has no separate logout action.
+
 Professor counts and the editor's submission viewer read `homework_submissions`,
 including ungraded work. Submission detail reads verify the assignment owner and
 current class instructor. The older `completed_assignments` helpers are retained
@@ -118,8 +158,9 @@ topics when the response is unusable. Empty histories return insufficient data
 without calling Rocky. Convenience calls own their engine/client, and reused
 engines serialize the complete payload transaction. The adapters also read actual problem scores from graded homework, preserving
 partial credit and snapshot topics. Homework grading is wired to submit/retry and
-the student/professor views. Recommendation widgets are not yet in the dashboard;
-callers must enforce the access rules below before requesting database reports.
+the student/professor views. The student overview shows topic practice suggestions
+from its latest graded attempts; the broader recommendation engine remains a
+separate backend. Callers must enforce the access rules below before requesting database reports.
 
 ## Access and scheduling rules
 

@@ -77,8 +77,10 @@ class DataBase:
         return result
 
     # READ: return a matching document, or None if not found.
-    def read_one(self, collection_name: str, query: dict):
+    def read_one(self, collection_name: str, query: dict, *, sort=None):
         collection = self._get_collection(collection_name)
+        if sort is not None:
+            return collection.find_one(query, sort=sort)
         return collection.find_one(query)
 
     # find: return all matching document(s), or None if not found.
@@ -92,7 +94,7 @@ class DataBase:
         return list(collection.aggregate(pipeline, maxTimeMS=5000))
 
     def list_classes_page(self, search="", page=0, page_size=25, instructor_id=None, active_only=False):
-        if page < 0 or page_size not in (10, 25, 50, 100):
+        if page < 0 or page_size not in (5, 10, 25, 50, 100):
             raise ValueError("Invalid pagination settings.")
         query = {}
         if active_only:
@@ -140,7 +142,7 @@ class DataBase:
     def list_students_for_class(
         self, class_id, enrolled: bool, search="", page=0, page_size=25,
     ):
-        if page < 0 or page_size not in (10, 25, 50, 100):
+        if page < 0 or page_size not in (5, 10, 25, 50, 100):
             raise ValueError("Invalid pagination settings.")
         class_id = self._object_id(class_id, "class ID")
         user_match = {"permissions": "student"}

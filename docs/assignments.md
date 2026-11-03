@@ -85,16 +85,18 @@ New assignments and added/edited problems use this format:
 ```
 
 `content` is the prompt and supports Streamlit Markdown, Unicode, and LaTeX.
-`points` must be finite and positive; it defaults to 1. `topic`,
-`reference_answer`, and `grading_guidance` default to empty strings. The professor
-assignment editor can set these fields for existing and new questions.
+`points` must be finite and positive; it defaults to 1. New and edited questions
+require a nonblank topic and reference answer as well as the question itself.
+`grading_guidance` remains optional: blank criteria delegate partial-credit
+decisions to Rocky. Publication checks every question again before posting.
 Reference answers and grading guidance are private: student pages render only
 prompts, points, topics, and the student's own responses. Do not expose whole
 problem/snapshot documents in downloads or frontend components.
 
 Legacy `{problem_id, content}` documents are normalized on read/submission with
 these defaults, preserving problem IDs. No backfill is required. Existing
-string-based authoring calls still work; text-only updates preserve metadata.
+snapshots remain readable. Text-only updates preserve metadata, but the resulting
+question must satisfy the required authoring fields before it can be saved.
 A full structured problem can be passed to `create_assignment`, `add_problem`,
 or `update_problem`. IDs stay stable when an existing question is edited.
 

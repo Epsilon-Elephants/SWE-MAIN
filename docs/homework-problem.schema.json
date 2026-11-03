@@ -12,7 +12,16 @@
     "content": {"type": "string", "pattern": "\\S", "description": "Student-visible prompt; Markdown, Unicode, and LaTeX are supported."},
     "points": {"type": "number", "exclusiveMinimum": 0},
     "topic": {"type": "string"},
-    "reference_answer": {"type": "string", "description": "Optional private reference answer; empty string when unset."},
+    "reference_answer": {"type": "string", "description": "Private reference answer. Required for new/edited problems; legacy documents may contain an empty string."},
     "grading_guidance": {"type": "string", "description": "Optional private grading criteria and partial-credit guidance; empty string when unset."}
+  },
+  "$defs": {
+    "authored": {
+      "description": "Use this subschema for new or edited problems. The root schema also supports historical snapshots.",
+      "allOf": [
+        {"$ref": "#"},
+        {"properties": {"topic": {"pattern": "\\S"}, "reference_answer": {"pattern": "\\S"}}}
+      ]
+    }
   }
 }
