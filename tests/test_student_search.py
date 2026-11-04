@@ -33,7 +33,7 @@ def test_search_renders_results_without_losing_navigation(student_app):
         search.return_value.text.assert_called_once_with("logic", max_results=5)
         assert student_app.get("link_button")[0].proto.url == "https://example.com/logic"
         assert "x" * 200 + "..." in [c.value for c in student_app.caption]
-        assert all(student_app.button(key=f"student_filter_{label}") for label in ("Homework", "Practice"))
+        assert student_app.button(key="student_filter_Homework")
 
 
 @pytest.mark.parametrize("failure", [False, True])
@@ -56,7 +56,7 @@ def test_search_handles_empty_results_and_service_errors(student_app, failure):
 def test_search_keeps_section_navigation_working(student_app, label):
     with patch("pages.dashboards.student.student.DDGS") as search:
         student_app.run()
-        student_app.button(key=f"student_filter_{label}").click().run()
+        student_app.switch_page("app_pages/practice.py").run()
         assert not student_app.exception
         assert student_app.title[0].value == label
         student_app.switch_page("app_pages/practice.py").run()

@@ -8,7 +8,7 @@ gatherUsageStats = false
 [theme]
 showWidgetBorder = true
 showSidebarBorder = false
-baseRadius = "10px"
+baseRadius = "8px"
 buttonRadius = "6px"
 font = "sans-serif"
 headingFont = "serif"

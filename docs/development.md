@@ -46,6 +46,45 @@ uses built-in fonts. A lockfile is not supplied yet.
 
 ## Accounts and database preparation
 
+### Appearance and lists
+
+Choose **Settings → Theme → Light / Dark / Use system setting** in Streamlit's
+top-right menu. `.streamlit/config.toml` supplies both native variants, including
+table, widget, and sidebar colors. The Account page explains where to switch;
+**Log out** appears only in the sidebar.
+
+The dashboard shows course cards and a short To do panel. Open a course for
+Assignments, Grades, or professor People management. Assignment hubs show
+searchable compact rows with one selected group. Lists show at most five entries;
+**See more** opens a popup with five per page. Rosters and enrollment dialogs also
+fetch five people per page. The assignment editor selects one question at a time;
+student submission details select one attempt. Study plans and recent visits
+remain available under collapsed sections rather than expanding the dashboard.
+
+New/edited questions require content, a topic, a professor reference answer, and
+positive points. `authored_problem`/`authored_problems` enforce this in database
+write helpers and publication checks; UI handlers validate too. Blank partial-credit
+guidance delegates scoring discretion to Rocky. The legacy normalization path
+continues to support historical snapshots. The JSON Schema's `$defs.authored`
+describes stricter authoring without invalidating old saved submissions.
+
+### Background grading
+
+The app starts one shared background grader per server process. Accepted answers
+are the durable MongoDB queue, so students can keep working or leave the page.
+For a host that suspends idle Streamlit processes, set
+`HOMEWORK_GRADING_WORKER=external` in the Streamlit environment and run an
+always-on worker with the same DB and Rocky configuration:
+
+```bash
+PYTHONPATH=app .venv/bin/python -m homework.worker
+```
+
+Use a process supervisor to restart it. Temporary Rocky outages retry
+automatically; invalid scores/input require an explicit retry. Apply the updated
+`docs/assignment-validation.js` to add retry, practice-suggestion, and professor
+override validation and the queue index. Existing submissions require no backfill.
+
 Public registration creates students. There is no public professor signup or
 role-promotion screen. A development professor account must have
 `permissions: "professor"` provisioned in MongoDB by someone managing that

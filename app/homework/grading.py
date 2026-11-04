@@ -21,12 +21,14 @@ def _id(value, label):
     return db._object_id(value, label)
 
 
-def _authorized_submission(submission_id, actor_id):
+def _authorized_submission(submission_id, actor_id, *, required_role=None):
     submission_id, actor_id = _id(submission_id, "submission ID"), _id(actor_id, "user ID")
     actor = db.read_one("users", {"_id": actor_id})
     role = (actor or {}).get("permissions")
     if role not in ("student", "professor"):
         raise ValueError("A student or professor account is required.")
+    if required_role is not None and role != required_role:
+        raise ValueError("A professor account is required to review or override grades.")
     query = {"_id": submission_id}
     if role == "student":
         query["user_id"] = actor_id
@@ -78,20 +80,53 @@ def grade_submission(submission_id, actor_id, *, rocky_client=None, now=None):
     preserves the submitted answers and records a safe error code, never a zero.
     """
     submission = _authorized_submission(submission_id, actor_id)
+    return _grade_saved_submission(submission, rocky_client=rocky_client, now=now)
+
+
+def queue_grading(submission_id, actor_id, *, now=None):
+    """Authorize an explicit retry without making the page wait for Rocky."""
+    submission = _authorized_submission(submission_id, actor_id)
+    now = now or datetime.now(timezone.utc)
+    db.update_one("homework_submissions", {
+        "_id": submission["_id"],
+        "$or": [
+            {"grading_status": {"$in": ["failed", "blocked"]}},
+            {"grading_status": "grading", "grading_lease_until": {"$lte": now}},
+            {"grading_status": "grading", "grading_lease_until": None},
+        ],
+    }, {"grading_status": "ungraded", "grading_error": None, "grading_retry_at": None})
+
+
+def pending_grading_query(now):
+    return {"$or": [
+        {"grading_status": "ungraded"},
+        {"grading_status": "grading", "grading_lease_until": {"$lte": now}},
+        {"grading_status": "grading", "grading_lease_until": None},
+        {"grading_status": "failed", "grading_error": "service_unavailable", "grading_retry_at": {"$lte": now}},
+        {"grading_status": "blocked", "grading_retry_at": {"$lte": now}},
+    ]}
+
+
+def _grade_saved_submission(submission, *, rocky_client=None, now=None, claim_filter=None):
+    """Trusted background processing of work already authorized on submission."""
     if submission.get("grading_status") == "graded":
         return "graded"
+    fixed_now = now
     now = now or datetime.now(timezone.utc)
     token = str(uuid4())
     claimed = db.update_one("homework_submissions", {
         "_id": submission["_id"],
-        "$or": [
+        **(claim_filter or {"$or": [
             {"grading_status": {"$in": ["ungraded", "failed", "blocked"]}},
             {"grading_status": "grading", "grading_lease_until": {"$lte": now}},
-        ],
+            {"grading_status": "grading", "grading_lease_until": None},
+        ]}),
     }, {
         "grading_status": "grading", "grading_token": token,
         "grading_started_at": now, "grading_lease_until": now + LEASE_DURATION,
         "grading_error": None,
+        "grading_attempts": submission.get("grading_attempts", 0) + 1,
+        "grading_retry_at": None,
     })
     if claimed.matched_count == 0:
         return "grading"
@@ -99,7 +134,8 @@ def grade_submission(submission_id, actor_id, *, rocky_client=None, now=None):
     try:
         payload = _grading_payload(submission)
         if payload is None:
-            fields = {"grading_status": "blocked", "grading_error": "missing_reference"}
+            fields = {"grading_status": "blocked", "grading_error": "missing_reference",
+                      "grading_retry_at": now + timedelta(minutes=1)}
         else:
             result = grade_with_rocky(payload, rocky_client=rocky_client)
             result["graded_at"] = datetime.now(timezone.utc)
@@ -116,6 +152,8 @@ def grade_submission(submission_id, actor_id, *, rocky_client=None, now=None):
         fields = {"grading_status": "failed", "grading_error": "invalid_response" if isinstance(error, InvalidGrade) else "invalid_submission"}
     except Exception as error:
         logger.warning("Rocky grading unavailable for submission %s (%s)", submission["_id"], type(error).__name__)
-        fields = {"grading_status": "failed", "grading_error": "service_unavailable"}
+        delay = min(600, 30 * 2 ** min(submission.get("grading_attempts", 0), 5))
+        fields = {"grading_status": "failed", "grading_error": "service_unavailable",
+                  "grading_retry_at": (fixed_now or datetime.now(timezone.utc)) + timedelta(seconds=delay)}
     saved = db.update_one("homework_submissions", owned_query, fields)
     return fields["grading_status"] if saved.matched_count else "grading"

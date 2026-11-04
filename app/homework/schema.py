@@ -57,6 +57,21 @@ def normalize_problems(problems):
     return normalized
 
 
+def authored_problem(value, *, problem_id=None):
+    """Validate new/edited questions; legacy reads remain permissive."""
+    problem = normalize_problem(value, problem_id=problem_id)
+    if not problem["topic"]:
+        raise ValueError("Topic is required.")
+    if not problem["reference_answer"]:
+        raise ValueError("Professor reference answer is required.")
+    return problem
+
+
+def authored_problems(problems):
+    normalized = normalize_problems(problems)
+    return [authored_problem(problem) for problem in normalized]
+
+
 def build_grading_payload(submission):
     """Build private JSON-safe input for Rocky; transport is handled by the grader.
 

@@ -72,7 +72,7 @@ class TestAssignmentClasses(unittest.TestCase):
             result = create_assignment(
                 " Homework ", str(professor_id), class_id=str(class_id),
                 posted=date(2026, 11, 1), due_date=date(2026, 11, 8),
-                problems=[" First problem "],
+                problems=[{"content": " First problem ", "topic": "Logic", "reference_answer": "Answer"}],
             )
         read.assert_called_once_with("classes", {"_id": class_id, "instructor_id": professor_id})
         self.assertEqual(result, "assignment-id")

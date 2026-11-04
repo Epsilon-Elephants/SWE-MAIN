@@ -10,15 +10,41 @@ from dotenv import load_dotenv
 from pymongo.errors import PyMongoError
 
 from db.student_dashboard import load_student_overview
+from components.compact_list import compact_list, close_compact_list
+from components.course_cards import course_cards, assignment_row
 from pages.dashboards.dashboard import Dashboard
 from pages.dashboards.student.due_dates import due_sort_key, due_status, resolve_timezone
 from pages.dashboards.student.recently_visited import get_recent
 from rocky.rocky import rocky
 
 
-def open_homework(item_id):
-    st.session_state["homework_assignment_id"] = item_id
+def open_homework(item_id, *, return_page="app_pages/homework.py"):
+    close_compact_list()
+    st.session_state["homework_assignment_id"] = str(item_id)
+    st.session_state.homework_return_page = return_page
     st.switch_page("app_pages/homework_assignment.py")
+
+OPENERS = {"homework": open_homework}
+
+
+def _render_coursework(row):
+    status = due_status(row.get("due_date"), tz=resolve_timezone(getattr(st.context, "timezone", None)))
+    assignment_row(row["title"], row["class_name"] + (f" · Due {status.when}" if status.when else ""), status.badge,
+                   key=f"overview_homework_{row['_id']}", open_assignment=lambda: open_homework(row["_id"]))
+
+
+def _render_recommendation(item):
+    with st.container(border=True):
+        st.markdown(f"**{item['topic']}**")
+        st.write(item["recommendation"])
+
+
+def _render_recent(item):
+    kind = item["kind"]
+    with st.container(border=True):
+        st.caption(" · ".join(line for line in [item.get("class_name"), kind.title(), item.get("due")] if line))
+        if st.button(item["title"], key=f"recentbtn_{kind}_{item['item_id']}"):
+            OPENERS[kind](item["item_id"])
 
 # Creates one Rocky AI per login session
 def get_rocky():
@@ -74,77 +100,48 @@ def rocky_dialog() -> None:
 class studentDash(Dashboard):
     def load_dash(self):
         user = st.session_state.get("user") or {}
-        st.caption("YOUR CLASSROOM / OVERVIEW")
-        st.title(f"Hello {user.get('first_name') or 'Student'}")
-        st.caption("Your courses, coursework, and progress in one place.")
+        st.title("Dashboard")
+        st.caption(f"Welcome back, {user.get('first_name') or 'Student'}")
         try:
             overview = load_student_overview(user.get("id"))
         except (ValueError, RuntimeError, PyMongoError):
             logging.exception("Could not load student overview")
             st.error("Could not load your overview. Please try again.")
         else:
-            metrics = st.columns(4)
-            values = [len(overview["classes"]), len(overview["assignments"]),
-                      overview["attempts"], overview["awaiting_grading"]]
-            for column, label, value in zip(metrics, ["Classes", "Available assignments", "Submitted attempts", "Awaiting grading"], values):
-                with column.container(border=True):
-                    st.metric(label, value)
-            courses, work = st.columns([1, 1], gap="large")
+            courses, work = st.columns([3, 1], gap="large")
             with courses:
-                st.subheader("Your classes")
+                st.subheader("Courses")
                 if not overview["classes"]:
                     st.info("You are not enrolled in a class yet. Your professor can add you to a class.")
-                for classroom in overview["classes"]:
-                    with st.container(border=True):
-                        st.markdown(f"**{classroom['Class']}**")
-                        earned, possible = classroom["Earned points"], classroom["Possible points"]
-                        st.metric("Class grade", f"{earned / possible * 100:.1f}%" if possible else "Not graded")
-                        st.caption(f"{earned:g} / {possible:g} points recorded by your professor")
+                course_cards([{"_id": row["_id"], "name": row["Class"]} for row in overview["classes"] if row.get("_id")], key="student_courses")
             with work:
-                st.subheader("Coursework")
+                st.subheader("To do")
                 tz = resolve_timezone(getattr(st.context, "timezone", None))
                 pending = sorted((row for row in overview["assignments"] if not row["submitted"]),
                                  key=lambda row: due_sort_key(row.get("due_date")))
-                statuses = [due_status(row.get("due_date"), tz=tz) for row in pending]
-                late = sum(status.kind == "overdue" for status in statuses)
-                st.caption(f"{len(pending)} available assignment(s) without a submission.")
-                if late:
-                    st.warning(f"{late} assignment(s) overdue. Late work is still accepted, so submit as soon as you can.",
-                               icon=":material/error:")
-                for row, status in list(zip(pending, statuses))[:5]:
-                    with st.container(border=True):
-                        st.markdown(f"**{row['title']}**")
-                        st.caption(row["class_name"])
-                        st.markdown(f":{status.color}-badge[{status.icon} {status.badge}]")
-                        if status.when:
-                            st.caption(f"Due {status.when}")
-                if len(pending) > 5:
-                    st.caption(f"+ {len(pending) - 5} more on the Homework page.")
+                compact_list(pending, _render_coursework, title="More coursework", key="student_coursework")
                 if not pending:
                     st.info("You have no unsubmitted coursework right now.")
+            if recommendations := overview.get("recommendations"):
+                with st.expander("Study plan · What to practice next"):
+                    compact_list(recommendations, _render_recommendation, title="More topic recommendations", key="student_study")
         with st.container(horizontal=True):
-            if st.button("Homework", key="student_filter_Homework", icon=":material/assignment:", type="primary"):
+            if st.button("View all assignments", key="student_filter_Homework", icon=":material/assignment:"):
                 st.switch_page("app_pages/homework.py")
-            if st.button("Practice", key="student_filter_Practice", icon=":material/psychology:"):
-                st.switch_page("app_pages/practice.py")
             if st.button("Ask Rocky", key="student_rocky_button", icon=":material/chat:"):
                 rocky_dialog()
-        self.render_recently_visited()
+        with st.expander("Recently viewed"):
+            self.render_recently_visited()
         with st.expander("Find learning resources", icon=":material/search:"):
             self.render_search()
 
     def render_recently_visited(self):
         st.subheader("Recently visited")
-        items = [item for item in get_recent() if item.get("kind") == "homework"]
+        items = [item for item in get_recent() if item.get("kind") in OPENERS]
         if not items:
             st.caption("Nothing here yet. Open an assignment!")
             return
-        with st.container(horizontal=True, key="recent_scroller"):
-            for item in items:
-                with st.container(border=True, key=f"recentcard_homework_{item['item_id']}"):
-                    st.caption("Homework")
-                    if st.button(item["title"], key=f"recentbtn_homework_{item['item_id']}"):
-                        open_homework(item["item_id"])
+        compact_list(items, _render_recent, title="More recently visited assignments", key="student_recent")
 
     def render_search(self):
         st.caption("Searches the public web. Your query is sent to an external search service; homework is not sent automatically.")

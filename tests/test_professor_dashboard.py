@@ -48,7 +48,7 @@ show_assignment_editor("{assignment_id}", "{professor_id}")
         assignment = {
             "professor_id": professor_id, "title": "Homework", "status": "draft",
             "posted": date(2026, 11, 1), "due_date": date(2026, 11, 8),
-            "problems": [{"problem_id": "first", "content": "Solve this"}],
+            "problems": [{"problem_id": "first", "content": "Solve this", "topic": "Logic", "reference_answer": "Solution"}],
         }
         with patch("pages.assignment_editor.get_assignment", return_value=assignment), patch(
             "pages.assignment_editor.update_assignment", return_value=True,
@@ -79,16 +79,20 @@ render_create_assignment("{professor_id}")
             self.assertFalse(app.exception)
             app.text_input[0].set_value("Homework")
             app.text_area(key="create_assignment_first_problem").set_value("Solve this")
+            next(field for field in app.text_input if field.label == "Topic").set_value("Logic")
+            next(field for field in app.text_area if field.label == "Reference answer (private)").set_value("Solution")
             app.date_input[0].set_value(date(2026, 11, 1))
             app.date_input[1].set_value(date(2026, 11, 8))
             app.button[0].click().run()
             self.assertFalse(app.exception)
-            create.assert_called_once_with(
-                "Homework", professor_id, "", class_id=str(class_id),
-                posted=date(2026, 11, 1), due_date=date(2026, 11, 8), status="published",
-                problems=[{"content": "Solve this", "points": 1.0, "topic": "",
-                           "reference_answer": "", "grading_guidance": ""}],
-            )
+            create.assert_called_once()
+            assert create.call_args.args == ("Homework", professor_id, "")
+            assert create.call_args.kwargs["class_id"] == str(class_id)
+            assert create.call_args.kwargs["posted"] == date(2026, 11, 1)
+            assert create.call_args.kwargs["due_date"] == date(2026, 11, 8)
+            assert create.call_args.kwargs["status"] == "published"
+            assert create.call_args.kwargs["problems"][0]["reference_answer"] == "Solution"
+            assert create.call_args.kwargs["problems"][0]["grading_guidance"] == ""
 
     def test_creation_rejects_invalid_date_order_and_preserves_input(self):
         app = AppTest.from_string(f'''
@@ -122,15 +126,16 @@ professorDash().load_dash()
 ''')
         with patch("pages.dashboards.professor.list_assignments_for_professor", return_value=assignments), patch.object(
             db, "list_classes_page", return_value=([{"_id": ObjectId(), "name": "Calculus"}], False),
-        ), patch("pages.dashboards.professor._load_assignment_context", return_value=({}, {})):
+        ), patch("pages.dashboards.professor._load_assignment_context", return_value=({ObjectId(): "Calculus"}, {})):
             app.run()
         self.assertFalse(app.exception)
         columns = [column for column in app.get("column") if column.subheader]
-        self.assertEqual(columns[0].subheader[0].value, "Active assignments")
-        self.assertEqual(columns[1].subheader[0].value, "Active classes")
-        self.assertEqual([e.label for e in columns[0].expander], ["Draft assignments (1)", "Closed assignments (1)"])
-        self.assertIn("**Ongoing**", [e.value for e in columns[0].markdown])
-        self.assertIn("**Calculus**", [e.value for e in columns[1].markdown])
+        self.assertEqual(columns[0].subheader[0].value, "Courses")
+        self.assertEqual(columns[-1].subheader[0].value, "To do")
+        self.assertIn("Calculus", [e.value for e in app.subheader])
+        self.assertIn("Ongoing", [button.label for button in app.button])
+        self.assertNotIn("Upcoming", [button.label for button in app.button])
+        self.assertNotIn("Finished", [button.label for button in app.button])
 
 
 if __name__ == "__main__":
@@ -165,7 +170,7 @@ def test_finish_later_saves_and_returns_to_assignments(switch_page, status, expe
         "posted": date(2026, 11, 1), "due_date": date(2026, 11, 8), "problems": [],
     }
     if status != "draft":
-        assignment["problems"] = [{"problem_id": "first", "content": "Solve this"}]
+        assignment["problems"] = [{"problem_id": "first", "content": "Solve this", "topic": "Logic", "reference_answer": "Solution"}]
     app = AppTest.from_string(f'''
 import streamlit as st
 from pages.assignment_editor import show_assignment_editor
