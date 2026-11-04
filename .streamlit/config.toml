@@ -3,14 +3,9 @@
 [browser]
 gatherUsageStats = false
 
+
+# Shared by both themes
 [theme]
-base = "light"
-primaryColor = "#254D70"
-backgroundColor = "#FCFAF5"
-secondaryBackgroundColor = "#F0EDE5"
-textColor = "#242D35"
-linkColor = "#254D70"
-borderColor = "#DAD6CC"
 showWidgetBorder = true
 showSidebarBorder = false
 baseRadius = "10px"
@@ -18,12 +13,41 @@ buttonRadius = "6px"
 font = "sans-serif"
 headingFont = "serif"
 headingFontWeights = [500, 500, 500, 500, 500, 500]
+
+[theme.light]
+primaryColor = "#254D70"
+backgroundColor = "#FCFAF5"
+secondaryBackgroundColor = "#F0EDE5"
+textColor = "#242D35"
+linkColor = "#254D70"
+borderColor = "#DAD6CC"
 dataframeHeaderBackgroundColor = "#F0EDE5"
 chartCategoricalColors = ["#254D70", "#B58937", "#557565", "#9C6262"]
 
-[theme.sidebar]
+[theme.light.sidebar]
 backgroundColor = "#172D40"
 secondaryBackgroundColor = "#243F56"
 textColor = "#FAF8F2"
+linkColor = "#E8C46D"
 primaryColor = "#E8C46D"
 borderColor = "#3E5366"
+
+[theme.dark] 
+primaryColor = "#F2D07D" 
+backgroundColor = "#1E293B" 
+secondaryBackgroundColor = "#334155" 
+textColor = "#F8FAFC" 
+linkColor = "#93C5FD" 
+borderColor = "#475569" 
+dataframeHeaderBackgroundColor = "#334155" 
+chartCategoricalColors = ["#93C5FD", "#F2D07D", "#86EFAC", "#FCA5A5"] 
+
+[theme.dark.sidebar] 
+backgroundColor = "#0F172A" 
+secondaryBackgroundColor = "#1E293B" 
+textColor = "#F8FAFC" 
+linkColor = "#F2D07D" 
+primaryColor = "#F2D07D" 
+borderColor = "#334155"
+
+
