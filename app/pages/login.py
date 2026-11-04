@@ -12,9 +12,19 @@ def login_page():
         st.title("Better questions.\nDeeper understanding.")
         st.write("A shared workspace for the study of philosophy and logic.")
         with st.container(border=True):
-            st.markdown("### For your classroom")
-            st.write("Organize coursework, work through questions, and keep track of submissions.")
-            st.caption("Students can create an account below. Professor accounts are provisioned by your course administrator.")
+            st.markdown("### For students")
+            st.write("Work through assignments and practice problems, and see where you need more study.")
+        with st.container(border=True):
+            st.markdown("### For professors")
+            st.write("Create assignments, assign them to your classes, and review submissions with Rocky's grading help.")
+        with st.container(border=True):
+            st.markdown("### How it works")
+            st.markdown(
+                "1. **Assignments:** professors build homework from logic problems.\n"
+                "2. **Practice:** students answer questions and get feedback.\n"
+                "3. **Rocky:** grades answers and recommends what to study next."
+            )
+        st.caption("Students can create an account on the right. Professor accounts are provisioned by your course administrator.")
     with account:
         st.title("Welcome")
         login_tab, register_tab = st.tabs(["Log in", "Register"])
