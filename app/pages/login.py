@@ -17,6 +17,13 @@ def login_page():
         with st.container(border=True):
             st.markdown("### For professors")
             st.write("Create assignments, assign them to your classes, and review submissions with Rocky's grading help.")
+        with st.container(border=True):
+            st.markdown("### How it works")
+            st.markdown(
+                "1. **Assignments:** professors build homework from logic problems.\n"
+                "2. **Practice:** students answer questions and get feedback.\n"
+                "3. **Rocky:** grades answers and recommends what to study next."
+            )
         st.caption("Students can create an account on the right. Professor accounts are provisioned by your course administrator.")
     with account:
         st.title("Welcome")
