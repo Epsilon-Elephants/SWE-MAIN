@@ -11,20 +11,21 @@ def login_page():
         st.caption("PHILOSOPHY CLASSROOM")
         st.title("Better questions.\nDeeper understanding.")
         st.write("A shared workspace for the study of philosophy and logic.")
-        with st.container(border=True):
-            st.markdown("### For students")
-            st.write("Work through assignments and practice problems, and see where you need more study.")
-        with st.container(border=True):
-            st.markdown("### For professors")
-            st.write("Create assignments, assign them to your classes, and review submissions with Rocky's grading help.")
-        with st.container(border=True):
-            st.markdown("### How it works")
+        students, professors = st.columns(2)
+        with students.container(border=True):
+            st.subheader("For students")
+            st.write("Complete assignments, see tentative and confirmed scores, and get topic-based study suggestions.")
+        with professors.container(border=True):
+            st.subheader("For professors")
+            st.write("Create course assignments, review Rocky's feedback, and confirm or adjust scores.")
+        with st.expander("How it works"):
             st.markdown(
-                "1. **Assignments:** professors build homework from logic problems.\n"
-                "2. **Practice:** students answer questions and get feedback.\n"
-                "3. **Rocky:** grades answers and recommends what to study next."
+                "1. **Assignments:** open your course and submit your answers.\n"
+                "2. **Rocky:** grades saved work in the background and provides tentative scores.\n"
+                "3. **Professor review:** your professor confirms or adjusts the scores that count toward your grade.\n"
+                "4. **Practice:** use feedback and topic recommendations to plan what to study next."
             )
-        st.caption("Students can create an account on the right. Professor accounts are provisioned by your course administrator.")
+        st.caption("Students can register here. Professor accounts are provided by your course administrator.")
     with account:
         st.title("Welcome")
         login_tab, register_tab = st.tabs(["Log in", "Register"])
