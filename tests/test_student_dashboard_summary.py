@@ -19,7 +19,7 @@ def test_overview_reports_latest_attempt_score_without_private_fields():
     graded = {
         "assignment_id": assignment_id, "submitted_at": now, "grading_status": "graded",
         "grading_result": {"total_points": 9, "max_points": 10, "percentage": 90, "problems": []},
-        "assignment_snapshot": {"problems": [{"reference_answer": "PRIVATE ANSWER"}]},
+        "assignment_snapshot": {"problems": [{"problem_id": "q1", "reference_answer": "PRIVATE ANSWER"}]},
     }
     older = {
         "assignment_id": assignment_id, "submitted_at": now - timedelta(days=1), "grading_status": "graded",
@@ -41,7 +41,7 @@ def test_overview_reports_latest_attempt_score_without_private_fields():
     assert row["submitted"] is True
     assert row["submitted_at"] == now
     assert row["score_percentage"] == 90
-    assert row["grade_label"] == "AI score: 9/10 points · 90%"
+    assert row["grade_label"] == "Tentative Rocky score: 9/10 points · 90%"
     assert "PRIVATE ANSWER" not in repr(result)
 
 
@@ -81,7 +81,7 @@ def test_dashboard_shows_summary_submitted_scores_and_course_counts():
              "due_date": now + timedelta(days=20), "submitted": False}
     graded = {"_id": ObjectId(), "title": "Venn diagrams", "class_id": sets, "class_name": "Sets",
               "due_date": now - timedelta(days=1), "submitted": True, "submitted_at": now - timedelta(days=2),
-              "grade_label": "AI score: 9/10 points · 90%", "score_percentage": 90}
+              "grade_label": "Tentative Rocky score: 9/10 points · 90%", "score_percentage": 90}
     pending = {"_id": ObjectId(), "title": "Quantifiers", "class_id": sets, "class_name": "Sets",
                "due_date": None, "submitted": True, "submitted_at": now - timedelta(hours=1),
                "grade_label": "Processing · Waiting for Rocky", "score_percentage": None}
@@ -96,7 +96,7 @@ def test_dashboard_shows_summary_submitted_scores_and_course_counts():
     captions = [caption.value for caption in app.caption]
     assert "2 assignments · 2 to do" in captions
     assert "2 assignments · 0 to do" in captions
-    assert "Sets · AI score: 9/10 points · 90%" in captions
+    assert "Sets · Tentative Rocky score: 9/10 points · 90%" in captions
     assert "90%" in captions and "Pending" in captions
     # Newest submission first; unsubmitted work stays in To do only.
     submitted_keys = [b.key for b in app.button if (b.key or "").startswith("overview_submitted_")]
@@ -117,7 +117,7 @@ def test_empty_dashboard_summary():
 def test_submitted_row_opens_the_homework():
     graded = {"_id": ObjectId(), "title": "Venn diagrams", "class_id": ObjectId(), "class_name": "Sets",
               "due_date": None, "submitted": True, "submitted_at": datetime.now(timezone.utc),
-              "grade_label": "AI score: 9/10 points · 90%", "score_percentage": 90}
+              "grade_label": "Tentative Rocky score: 9/10 points · 90%", "score_percentage": 90}
     overview = {"classes": [], "assignments": [graded], "attempts": 1, "awaiting_grading": 0}
     app = AppTest.from_file(ENTRYPOINT)
     app.session_state.user = {"id": str(ObjectId()), "permissions": "student"}
