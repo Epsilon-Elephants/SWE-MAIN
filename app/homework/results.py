@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 import streamlit as st
 
 from homework.grading import queue_grading
-from homework.grades import effective_grade
+from homework.grades import effective_grade, confirmed_grade
 from homework.study import practice_suggestion
 
 
@@ -13,7 +13,7 @@ def grading_label(submission):
     status = submission.get("grading_status", "ungraded")
     result = effective_grade(submission) or {}
     if status == "graded" and result:
-        source = "Professor score" if submission.get("professor_grade") else "AI score"
+        source = "Confirmed score" if confirmed_grade(submission) else "Tentative Rocky score"
         return f"{source}: {result['total_points']:g}/{result['max_points']:g} points · {result['percentage']:g}%"
     if status == "failed" and submission.get("grading_retry_at"):
         return "Processing · Rocky will retry automatically"
@@ -29,7 +29,7 @@ def show_problem_result(submission, problem_id):
         return
     result = next((row for row in (effective_grade(submission) or {}).get("problems", []) if row["problem_id"] == problem_id), None)
     if result:
-        source = "Professor score" if submission.get("professor_grade") else "AI score"
+        source = "Confirmed score" if confirmed_grade(submission) else "Tentative Rocky score"
         st.caption(f"{source}: {result['points_awarded']:g}/{result['max_points']:g} points")
         st.text(result["feedback"])
         problem = next(row for row in submission["assignment_snapshot"]["problems"] if row["problem_id"] == problem_id)

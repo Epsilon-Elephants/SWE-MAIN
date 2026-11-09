@@ -12,6 +12,9 @@ separate Assignments, Grades, and professor People management. Assignment editin
 shows one question at a time. New/edited questions require a prompt, topic,
 reference answer, and positive points; blank partial-credit criteria let Rocky
 choose reasonable partial credit.
+Rocky scores are tentative until a professor confirms or overrides them. Student
+course pages show a compact bar with confirmed points, unconfirmed Rocky points,
+and a combined estimate; each assignment contributes only once.
 
 ## Documentation
 

@@ -181,6 +181,7 @@ homeworkSubmissionValidator.$jsonSchema.properties.professor_grade = {
   properties: {
     ...homeworkSubmissionValidator.$jsonSchema.properties.grading_result.properties,
     graded_by: { bsonType: "objectId" },
+    source: { enum: ["rocky", "professor"] },
     reason: { bsonType: "string", pattern: "\\S", maxLength: 2000 },
   },
 };

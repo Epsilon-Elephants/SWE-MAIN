@@ -98,6 +98,15 @@ guidance and builds topic-based overview recommendations from published grades.
 the original AI result. Professor review and overrides use an authorized dialog
 and revision checks.
 
+Rocky grades remain tentative until a professor accepts them or saves an
+override. `professor_grade` stores that confirmed score, including whether its
+source is Rocky or a professor edit. `course_score_summary` groups attempts by
+assignment and uses the latest professor decision, or otherwise the newest
+graded AI attempt. An assignment with a confirmed score cannot also contribute
+tentative points. The student course header refreshes its aggregate score bar
+every five seconds after rechecking current role and enrollment. Only point
+totals reach the chart; answers and grading references stay server-side.
+
 `app/components/compact_list.py` renders five entries plus a See more popup with
 five entries per page. Navigation actions close the list popup before opening a
 different view/dialog. Professor class and roster browsers also use pages of five,

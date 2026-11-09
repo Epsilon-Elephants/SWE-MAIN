@@ -85,6 +85,15 @@ automatically; invalid scores/input require an explicit retry. Apply the updated
 `docs/assignment-validation.js` to add retry, practice-suggestion, and professor
 override validation and the queue index. Existing submissions require no backfill.
 
+Rocky scores now remain tentative until a professor confirms them or saves an
+override. The student course header shows confirmed points, unconfirmed Rocky
+points, and a combined estimate in a small score bar, refreshed every five
+seconds. The most recent professor decision wins per assignment; the same
+assignment's Rocky result and other attempts cannot add duplicate points.
+Existing professor overrides count as confirmed, while historical AI-only
+results remain tentative. `professor_grade.source` records `rocky` or
+`professor` for new confirmations; it is optional for legacy documents.
+
 Public registration creates students. There is no public professor signup or
 role-promotion screen. A development professor account must have
 `permissions: "professor"` provisioned in MongoDB by someone managing that
