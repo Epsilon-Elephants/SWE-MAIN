@@ -15,6 +15,8 @@ def course_cards(courses, *, key="courses"):
         with st.container(border=True):
             st.caption(":material/school: Course")
             st.subheader(course["name"])
+            if detail := course.get("detail"):
+                st.caption(detail)
             if st.button("Open course", key=f"{key}_{course['_id']}", width="stretch"):
                 open_course(course["_id"])
     compact_list(courses, render, title="More courses", key=key, columns=3)
