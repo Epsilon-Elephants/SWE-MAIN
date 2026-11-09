@@ -16,7 +16,7 @@ from db.homework_submissions import (
 from homework.schema import normalize_problems
 from homework.results import grading_action, grading_label, show_problem_result
 
-from pages.dashboards.student.due_dates import due_sort_key, due_status, resolve_timezone
+from pages.dashboards.student.due_dates import badge_markdown, due_sort_key, due_status, resolve_timezone
 from pages.dashboards.student.recently_visited import record_visit
 
 
@@ -102,7 +102,8 @@ def show_homework_list():
                    and (selected_group == "All assignments" or (row["_id"] in latest) == (selected_group == "Submitted"))]
         def render_assignment(assignment):
             submission = latest.get(assignment["_id"])
-            status = grading_label(submission) if submission else "Not submitted"
+            status = (f"{badge_markdown(None, submitted=True)} {grading_label(submission)}" if submission
+                      else badge_markdown(due_status(assignment.get("due_date"), tz=tz)) or "Not submitted")
             def open_assignment():
                 close_compact_list()
                 st.session_state.homework_assignment_id = str(assignment["_id"])

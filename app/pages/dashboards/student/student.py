@@ -13,7 +13,7 @@ from db.student_dashboard import load_student_overview
 from components.compact_list import compact_list, close_compact_list
 from components.course_cards import course_cards, assignment_row
 from pages.dashboards.dashboard import Dashboard
-from pages.dashboards.student.due_dates import due_sort_key, due_status, resolve_timezone
+from pages.dashboards.student.due_dates import badge_markdown, due_sort_key, due_status, resolve_timezone
 from pages.dashboards.student.recently_visited import get_recent
 from rocky.rocky import rocky
 
@@ -29,7 +29,7 @@ OPENERS = {"homework": open_homework}
 
 def _render_coursework(row):
     status = due_status(row.get("due_date"), tz=resolve_timezone(getattr(st.context, "timezone", None)))
-    assignment_row(row["title"], row["class_name"] + (f" · Due {status.when}" if status.when else ""), status.badge,
+    assignment_row(row["title"], row["class_name"] + (f" · Due {status.when}" if status.when else ""), badge_markdown(status),
                    key=f"overview_homework_{row['_id']}", open_assignment=lambda: open_homework(row["_id"]))
 
 

@@ -66,3 +66,12 @@ def due_status(due, now=None, tz=timezone.utc):
     if delta <= SOON:
         return DueStatus("soon", f"Due in {_span(delta)}", "orange", ":material/schedule:", when)
     return DueStatus("upcoming", f"Due in {_span(delta)}", "blue", ":material/event:", when)
+
+
+def badge_markdown(status, submitted=False):
+    # streamlit badge for due date status or empty string if none
+    if submitted:
+        return ":green-badge[:material/check_circle: Submitted]"
+    if status.kind == "none":
+        return ""
+    return f":{status.color}-badge[{status.icon} {status.badge}]"
