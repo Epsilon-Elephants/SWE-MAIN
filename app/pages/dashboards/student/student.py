@@ -54,7 +54,7 @@ def _render_summary(assignments, now=None):
     columns[1].metric("Due in 7 days", due_soon)
     columns[2].metric("Submitted", len(assignments) - len(pending))
     columns[3].metric("Average score", f"{sum(scores) / len(scores):.0f}%" if scores else "—",
-                      help="Average of your graded homework (latest attempt each).")
+                      help="Average of each assignment's latest attempt. Includes tentative Rocky scores awaiting professor confirmation.")
 
 
 def _course_detail(class_id, assignments):
