@@ -491,3 +491,88 @@ def test_automatic_outage_retry_recovers_and_publishes_recommendations(memory):
     assert process_next_submission(rocky_client=GradingClient(), now=NOW + timedelta(seconds=30))
     assert saved["grading_status"] == "graded"
     assert "Conjunction" in saved["grading_result"]["problems"][0]["study_recommendation"]
+
+
+def test_professor_confirmation_preserves_original_and_moves_score_once(memory):
+    from homework.grades import course_score_summary
+    from homework.review import confirm_rocky_grade
+
+    sid = memory.submit()
+    client = GradingClient()
+    grade_submission(sid, memory.student, rocky_client=client)
+    saved = memory.collections["homework_submissions"][0]
+    original = copy.deepcopy(saved["grading_result"])
+    assert course_score_summary([saved])["tentative"]["earned"] == 3
+    confirm_rocky_grade(sid, memory.professor, expected_revision=0)
+    summary = course_score_summary([saved])
+    assert summary["confirmed"]["earned"] == 3
+    assert summary["tentative"]["earned"] == summary["tentative"]["possible"] == 0
+    assert summary["combined"]["possible"] == 4
+    assert saved["professor_grade"]["source"] == "rocky"
+    assert saved["professor_grade"]["graded_by"] == memory.professor
+    assert saved["grading_result"] == original
+    assert client.calls == 1
+    with pytest.raises(ValueError, match="changed"):
+        confirm_rocky_grade(sid, memory.professor, expected_revision=0)
+
+
+def test_confirmation_requires_current_professor_and_completed_valid_grading(memory):
+    from homework.review import confirm_rocky_grade
+
+    sid = memory.submit()
+    with pytest.raises(ValueError):
+        confirm_rocky_grade(sid, memory.professor, expected_revision=0)
+    grade_submission(sid, memory.student, rocky_client=GradingClient())
+    with pytest.raises(ValueError):
+        confirm_rocky_grade(sid, memory.student, expected_revision=0)
+    saved = memory.collections["homework_submissions"][0]
+    saved["grading_result"]["problems"][0]["points_awarded"] = 100
+    with pytest.raises(ValueError):
+        confirm_rocky_grade(sid, memory.professor, expected_revision=0)
+    assert "professor_grade" not in saved
+    memory.collections["classes"][0]["instructor_id"] = ObjectId()
+    with pytest.raises(ValueError):
+        confirm_rocky_grade(sid, memory.professor, expected_revision=0)
+
+
+def test_professor_ui_can_confirm_override_and_restore_without_double_counting(memory, monkeypatch):
+    from homework.grades import course_score_summary
+    from pages import assignment_editor
+
+    sid = memory.submit()
+    client = GradingClient()
+    grade_submission(sid, memory.student, rocky_client=client)
+    def rows(*args):
+        documents = copy.deepcopy(memory.collections["homework_submissions"])
+        for row in documents:
+            row["user"] = {"first_name": "Student"}
+        return documents
+    monkeypatch.setattr(assignment_editor, "list_submissions_for_assignment", rows)
+    app = AppTest.from_string(f'from pages.assignment_editor import show_assignment_editor\nshow_assignment_editor("{memory.assignment_id}", "{memory.professor}")')
+    app.session_state.user = {"id": str(memory.professor), "permissions": "professor"}
+    app.run()
+    app.button(key=f"review_submission_{sid}").click().run()
+    assert not app.exception
+    app.button(key=f"confirm_rocky_{sid}").click().run()
+    assert not app.exception
+    assert any("Confirmed score: 3/4 points" in row.value for row in app.caption)
+    saved = memory.collections["homework_submissions"][0]
+    assert course_score_summary([saved])["confirmed"]["earned"] == 3
+    app.button(key=f"review_submission_{sid}").click().run()
+    assert not app.exception
+    assert app.toggle(key=f"override_enabled_{sid}_1").value is False
+    app.toggle(key=f"override_enabled_{sid}_1").set_value(True).run()
+    app.number_input(key=f"professor_score_{sid}_1_second").set_value(2.0)
+    app.text_area(key=f"professor_reason_{sid}_1").set_value("Equivalent reasoning accepted.")
+    next(button for button in app.button if button.label == "Save professor override").click().run()
+    assert not app.exception
+    assert course_score_summary([saved])["confirmed"]["earned"] == 4
+    assert course_score_summary([saved])["tentative"]["earned"] == 0
+    app.button(key=f"review_submission_{sid}").click().run()
+    app.button(key=f"restore_rocky_{sid}").click().run()
+    assert not app.exception
+    assert course_score_summary([saved])["confirmed"]["earned"] == 3
+    assert course_score_summary([saved])["combined"]["possible"] == 4
+    assert saved["professor_grade"]["source"] == "rocky"
+    assert saved["grading_result"]["percentage"] == 75
+    assert client.calls == 1

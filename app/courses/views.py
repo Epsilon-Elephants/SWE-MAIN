@@ -9,6 +9,7 @@ from db.DataBase import db
 from db.assignments import list_assignments_for_professor, list_assignments_for_student
 from db.homework_submissions import list_submissions_for_student
 from homework.results import grading_label
+from homework.grades import course_score_summary
 
 
 def authorized_course(course_id, user):
@@ -27,6 +28,24 @@ def authorized_course(course_id, user):
     if course is None:
         raise ValueError("This course is not available.")
     return course
+
+
+@st.fragment(run_every="5s")
+def student_course_scores(course_id):
+    """Refresh aggregates without rerunning assignment filters or student forms."""
+    user = st.session_state.get("user") or {}
+    if user.get("permissions") != "student" or not user.get("id"):
+        st.error("Sign in with a student account to view course scores.")
+        return
+    try:
+        course = authorized_course(course_id, user)
+        uid = db._object_id(user["id"], "user ID")
+        rows = [row for row in list_submissions_for_student(user["id"])
+                if row.get("class_id") == course["_id"] and row.get("user_id") == uid]
+        from components.course_scores import show_score_bar
+        show_score_bar(course_score_summary(rows))
+    except (ValueError, RuntimeError, PyMongoError):
+        st.caption("Course scores are temporarily unavailable. Try again shortly.")
 
 
 def show_courses(user):
@@ -62,6 +81,8 @@ def show_course(user):
         assignments = [row for row in source if row["class_id"] == course["_id"]]
         st.caption("Courses / " + course["name"])
         st.title(course["name"])
+        if not professor:
+            student_course_scores(course_id)
         sections = ["Home", "Assignments", "Grades"] + (["People"] if professor else [])
         section = st.segmented_control("Course navigation", sections, default="Assignments", key=f"course_section_{course_id}") or "Assignments"
         if section == "People":
@@ -80,15 +101,18 @@ def show_course(user):
                 ids = list({row["user_id"] for row in rows})
                 users = {row["_id"]: row for row in db.find("users", {"_id": {"$in": ids}})} if ids else {}
             else:
-                rows = [row for row in list_submissions_for_student(user["id"]) if row["class_id"] == course["_id"]]
+                uid = db._object_id(user["id"], "user ID")
+                rows = [row for row in list_submissions_for_student(user["id"])
+                        if row.get("class_id") == course["_id"] and row.get("user_id") == uid]
                 users = {}
-                membership = db.read_one("students", {"user_id": db._object_id(user["id"], "user ID"), "class_id": course["_id"]}) or {}
+                membership = db.read_one("students", {"user_id": uid, "class_id": course["_id"]}) or {}
                 recorded = membership.get("grade") or {}
                 earned, possible = recorded.get("earned", 0), recorded.get("possible", 0)
                 if (isinstance(earned, (int, float)) and isinstance(possible, (int, float))
                         and isfinite(earned) and isfinite(possible) and possible > 0):
-                    st.metric("Course grade", f"{earned / possible * 100:.1f}%")
-                    st.caption(f"{earned:g}/{possible:g} points recorded by your professor. Assignment scores appear below.")
+                    with st.expander("Professor-recorded course grade"):
+                        st.metric("Recorded grade", f"{earned / possible * 100:.1f}%")
+                        st.caption(f"{earned:g}/{possible:g} points entered separately by your professor; these are not added to the assignment totals above.")
             rows.sort(key=lambda row: row["submitted_at"], reverse=True)
             if not rows:
                 st.caption("No submissions yet.")

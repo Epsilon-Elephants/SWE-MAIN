@@ -121,6 +121,8 @@ def test_student_opens_course_then_assignment_without_private_data():
     with patch("pages.dashboards.student.student.load_student_overview", return_value=overview), patch(
         "pages.dashboards.student.student.get_recent", return_value=[],
     ), patch.object(db, "read_one", side_effect=read), patch("courses.views.list_assignments_for_student", return_value=[assignment]), patch(
+        "courses.views.list_submissions_for_student", return_value=[],
+    ), patch(
         "homework.views.get_homework_for_student", return_value=assignment,
     ), patch("homework.views.list_submissions_for_student", return_value=[]), patch("homework.views.record_visit"):
         app = AppTest.from_file(ENTRYPOINT)

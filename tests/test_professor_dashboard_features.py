@@ -175,7 +175,7 @@ def test_editor_lists_submissions():
     assert not app.exception
     assert not app.dataframe
     assert "Grace Hopper" in [row.value for row in app.markdown]
-    assert "AI score: 7/10 points · 70%" in [row.value for row in app.caption]
+    assert "Tentative Rocky score: 7/10 points · 70%" in [row.value for row in app.caption]
     assert "Nov 05, 2026 14:30 UTC" in [row.value for row in app.caption]
     assert app.button(key=f"review_submission_{rows[0]['_id']}").label == "Review and grade"
     assert "Student response" not in [text.value for text in app.text]

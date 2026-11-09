@@ -8,7 +8,7 @@ from pymongo.errors import PyMongoError
 from db.DataBase import db
 from homework.grades import effective_grade
 from homework.results import grading_action, grading_label
-from homework.review import get_submission_for_review, restore_rocky_grade, save_professor_grade
+from homework.review import get_submission_for_review, restore_rocky_grade, save_professor_grade, confirm_rocky_grade
 
 logger = logging.getLogger(__name__)
 REVIEW_SELECTION = "professor_submission_review"
@@ -53,12 +53,12 @@ def review_submission_dialog(submission_id, expected_revision):
     if ready:
         rocky_column, final_column = st.columns(2)
         rocky_column.metric("Rocky's grade", f"{rocky_grade['total_points']:g}/{rocky_grade['max_points']:g} points")
-        final_column.metric("Current published grade", f"{final_grade['total_points']:g}/{final_grade['max_points']:g} points")
-        editing = st.toggle("Override Rocky's grade", value=bool(submission.get("professor_grade")),
+        final_column.metric("Confirmed grade" if submission.get("professor_grade") else "Tentative grade", f"{final_grade['total_points']:g}/{final_grade['max_points']:g} points")
+        editing = st.toggle("Override Rocky's grade", value=bool(submission.get("professor_grade")) and submission["professor_grade"].get("source") != "rocky",
                             help="Changes take effect after saving. To remove a saved override, choose Use Rocky's original grade.",
                             key=f"override_enabled_{submission_id}_{expected_revision}")
         if editing:
-            st.caption("Adjust scores or feedback below, then save once for this attempt. The published grade will be labeled as a professor grade.")
+            st.caption("Adjust scores or feedback below, then save once to confirm the grade for this attempt.")
     else:
         st.info("You can review the answers now. Once Rocky finishes, refresh to see its scores and override them.")
         st.button("Refresh Rocky's grade", key=f"refresh_review_{submission_id}")
@@ -110,12 +110,15 @@ def review_submission_dialog(submission_id, expected_revision):
                                   key=f"professor_reason_{submission_id}_{expected_revision}")
             save = st.form_submit_button("Save professor override", type="primary")
     try:
+        if ready and not editing and not submission.get("professor_grade") and st.button("Confirm Rocky's grade", key=f"confirm_rocky_{submission_id}", type="primary"):
+            confirm_rocky_grade(submission_id, user["id"], expected_revision=expected_revision)
+            _finish_review("Rocky's scores are confirmed and now count toward the student's grade.")
         if save:
             save_professor_grade(submission_id, user["id"], scores, feedback, reason, expected_revision=expected_revision)
-            _finish_review("Professor grade saved. The student can now see the updated scores and feedback.")
-        if submission.get("professor_grade") and st.button("Use Rocky's original grade", key=f"restore_rocky_{submission_id}"):
+            _finish_review("Professor grade confirmed. The student can now see the updated scores and feedback.")
+        if submission.get("professor_grade") and submission["professor_grade"].get("source") != "rocky" and st.button("Use Rocky's original grade", key=f"restore_rocky_{submission_id}"):
             restore_rocky_grade(submission_id, user["id"], expected_revision=expected_revision)
-            _finish_review("Rocky's original grade is now published.")
+            _finish_review("Rocky's original grade is now confirmed.")
         if not ready:
             grading_action(submission, user["id"])
     except ValueError as error:

@@ -45,14 +45,27 @@ def save_professor_grade(submission_id, professor_id, scores, feedback, reason, 
                      "feedback": feedback[problem["problem_id"]]} for problem in problems],
     }), problems)
     result.update(graded_by=db._object_id(professor_id, "professor ID"),
-                  graded_at=datetime.now(timezone.utc), reason=reason.strip())
+                  graded_at=datetime.now(timezone.utc), reason=reason.strip(), source="professor")
+    _save_grade(submission, result, expected_revision)
+    return result
+
+
+def confirm_rocky_grade(submission_id, professor_id, *, expected_revision):
+    """Accept Rocky's validated scores as a confirmed grade, preserving the original."""
+    submission = get_submission_for_review(submission_id, professor_id)
+    if submission.get("grading_status") != "graded" or not submission.get("grading_result"):
+        raise ValueError("Rocky's grade is not available yet.")
+    problems = normalize_problems(submission["assignment_snapshot"]["problems"])
+    original = submission["grading_result"]
+    result = validate_grading_response(json.dumps({
+        "schema_version": original["schema_version"], "results": original["problems"],
+    }), problems)
+    result.update(graded_by=db._object_id(professor_id, "professor ID"),
+                  graded_at=datetime.now(timezone.utc), reason="Professor confirmed Rocky's scores.", source="rocky")
     _save_grade(submission, result, expected_revision)
     return result
 
 
 def restore_rocky_grade(submission_id, professor_id, *, expected_revision):
-    """Publish the original AI grade again without another Rocky request."""
-    submission = get_submission_for_review(submission_id, professor_id)
-    if submission.get("grading_status") != "graded" or not submission.get("grading_result"):
-        raise ValueError("Rocky's grade is not available yet.")
-    _save_grade(submission, None, expected_revision)
+    """A professor choosing the original AI grade also confirms that grade."""
+    return confirm_rocky_grade(submission_id, professor_id, expected_revision=expected_revision)
