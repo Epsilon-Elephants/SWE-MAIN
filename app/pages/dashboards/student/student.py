@@ -1,5 +1,6 @@
 """Student overview and the Kent State Rocky assistant."""
 from contextlib import closing
+from datetime import datetime, timedelta, timezone
 import logging
 from urllib.parse import urlparse
 
@@ -13,7 +14,7 @@ from db.student_dashboard import load_student_overview
 from components.compact_list import compact_list, close_compact_list
 from components.course_cards import course_cards, assignment_row
 from pages.dashboards.dashboard import Dashboard
-from pages.dashboards.student.due_dates import due_sort_key, due_status, resolve_timezone
+from pages.dashboards.student.due_dates import _as_utc, due_sort_key, due_status, resolve_timezone
 from pages.dashboards.student.recently_visited import get_recent
 from rocky.rocky import rocky
 
@@ -31,6 +32,35 @@ def _render_coursework(row):
     status = due_status(row.get("due_date"), tz=resolve_timezone(getattr(st.context, "timezone", None)))
     assignment_row(row["title"], row["class_name"] + (f" · Due {status.when}" if status.when else ""), status.badge,
                    key=f"overview_homework_{row['_id']}", open_assignment=lambda: open_homework(row["_id"]))
+
+
+def _render_submitted(row):
+    percentage = row.get("score_percentage")
+    metadata = " · ".join(filter(None, [row["class_name"], row.get("grade_label")]))
+    assignment_row(row["title"], metadata, f"{percentage:g}%" if percentage is not None else "Pending",
+                   key=f"overview_submitted_{row['_id']}", open_assignment=lambda: open_homework(row["_id"]))
+
+
+def _render_summary(assignments, now=None):
+    now = now or datetime.now(timezone.utc)
+    pending = [row for row in assignments if not row["submitted"]]
+    due_soon = sum(
+        row.get("due_date") is not None and now <= _as_utc(row["due_date"]) <= now + timedelta(days=7)
+        for row in pending
+    )
+    scores = [row["score_percentage"] for row in assignments if row.get("score_percentage") is not None]
+    columns = st.columns(4)
+    columns[0].metric("To do", len(pending))
+    columns[1].metric("Due in 7 days", due_soon)
+    columns[2].metric("Submitted", len(assignments) - len(pending))
+    columns[3].metric("Average score", f"{sum(scores) / len(scores):.0f}%" if scores else "—",
+                      help="Average of your graded homework (latest attempt each).")
+
+
+def _course_detail(class_id, assignments):
+    rows = [row for row in assignments if row.get("class_id") == class_id]
+    to_do = sum(not row["submitted"] for row in rows)
+    return f"{len(rows)} assignment{'s' if len(rows) != 1 else ''} · {to_do} to do"
 
 
 def _render_recommendation(item):
@@ -108,12 +138,16 @@ class studentDash(Dashboard):
             logging.exception("Could not load student overview")
             st.error("Could not load your overview. Please try again.")
         else:
+            _render_summary(overview["assignments"])
             courses, work = st.columns([3, 1], gap="large")
             with courses:
                 st.subheader("Courses")
                 if not overview["classes"]:
                     st.info("You are not enrolled in a class yet. Your professor can add you to a class.")
-                course_cards([{"_id": row["_id"], "name": row["Class"]} for row in overview["classes"] if row.get("_id")], key="student_courses")
+                course_cards([
+                    {"_id": row["_id"], "name": row["Class"], "detail": _course_detail(row["_id"], overview["assignments"])}
+                    for row in overview["classes"] if row.get("_id")
+                ], key="student_courses")
             with work:
                 st.subheader("To do")
                 tz = resolve_timezone(getattr(st.context, "timezone", None))
@@ -122,6 +156,14 @@ class studentDash(Dashboard):
                 compact_list(pending, _render_coursework, title="More coursework", key="student_coursework")
                 if not pending:
                     st.info("You have no unsubmitted coursework right now.")
+                submitted = sorted(
+                    (row for row in overview["assignments"] if row["submitted"]),
+                    key=lambda row: _as_utc(row["submitted_at"]) if row.get("submitted_at") else datetime.min.replace(tzinfo=timezone.utc),
+                    reverse=True,
+                )
+                if submitted:
+                    st.subheader("Submitted")
+                    compact_list(submitted, _render_submitted, title="More submitted work", key="student_submitted")
             if recommendations := overview.get("recommendations"):
                 with st.expander("Study plan · What to practice next"):
                     compact_list(recommendations, _render_recommendation, title="More topic recommendations", key="student_study")
