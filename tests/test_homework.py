@@ -15,6 +15,8 @@ from db.assignments import create_assignment, update_problem
 from db.homework_submissions import get_homework_for_student, submit_homework
 from homework.schema import build_grading_payload, normalize_problem, normalize_problems
 
+pytestmark = pytest.mark.regression
+
 
 @pytest.fixture
 def homework():
@@ -154,7 +156,7 @@ def test_student_flow_from_dashboard_to_submission(homework):
         history.append(document)
         return document["_id"]
 
-    with patch.object(db, "read_one", side_effect=read), patch.object(db, "find", side_effect=find), patch.object(db, "insert_one", side_effect=insert) as save:
+    with patch.object(db, "read_one", side_effect=read), patch.object(db, "find", side_effect=find), patch.object(db, "insert_one", side_effect=insert) as save, patch("homework.views.grade_submission", return_value="ungraded") as grade:
         app.run()
         assert not app.exception
         app.button(key="student_filter_Homework").click().run()
@@ -179,6 +181,7 @@ def test_student_flow_from_dashboard_to_submission(homework):
         assert not app.exception
         assert app.success
         assert len(history) == 1
+        grade.assert_called_once_with(history[0]["_id"], user_id)
         assert all("PRIVATE ANSWER" not in e.value for e in [*app.markdown, *app.text, *app.caption])
         app.run()  # Ordinary reruns must never create extra attempts.
         assert len(history) == 1

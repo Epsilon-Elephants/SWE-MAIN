@@ -12,6 +12,8 @@ sys.path.append(str(Path(__file__).resolve().parents[1] / "app"))
 
 from db.DataBase import db
 
+pytestmark = pytest.mark.regression
+
 
 @pytest.mark.parametrize("title,problem,message", [
     ("  ", "Solve this", "Assignment title is required."),

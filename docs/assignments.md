@@ -1,6 +1,6 @@
 # Assignment dates and completions
 
-For a complete example of what the AI grading input will look like, see
+For a complete example of the AI grading input/output, see
 [Problem format and AI integration](ai-grading.md). For navigation and collection
 relationships, see [How the application works](architecture.md).
 
@@ -48,8 +48,9 @@ title and valid dates. In the editor, save each problem's changes before posting
 or finishing later. Finish later saves assignment details and returns to the
 assignment list; previously published or closed homework keeps its status.
 Students can open Homework from their dashboard, select an assignment, answer
-its questions, and submit. Grading is not connected yet; the scored completion
-helpers remain reserved for trusted grading code.
+its questions, and submit. The UI saves the answers before Rocky grades each
+problem using the professor's reference answer and rubric. AI results are stored
+on the submission; legacy scored completion helpers remain separate.
 
 ## MongoDB validation
 
@@ -65,7 +66,7 @@ perform those checks. Existing conflicting validators must be updated separately
 
 ## Short-answer problem format (v1)
 
-`app/homework/schema.py` owns normalization and the future grading payload.
+`app/homework/schema.py` owns normalization and the private grading payload.
 The machine-readable canonical problem schema is
 [`homework-problem.schema.json`](homework-problem.schema.json).
 New assignments and added/edited problems use this format:
@@ -97,7 +98,7 @@ string-based authoring calls still work; text-only updates preserve metadata.
 A full structured problem can be passed to `create_assignment`, `add_problem`,
 or `update_problem`. IDs stay stable when an existing question is edited.
 
-## Ungraded submissions
+## Submissions and AI grades
 
 `db.homework_submissions.submit_homework(assignment_id, user_id, answers)` takes a
 mapping from problem ID to short-answer text. The UI passes the authenticated
@@ -117,9 +118,12 @@ The MongoDB `homework_submissions` collection stores:
   problems including private instructor grading guidance at submission time.
 - `answers`: ordered `{problem_id, answer}` objects, with trimmed, nonblank text.
 
-No score, correctness, feedback, completion record, recommendation update, or AI
-request is produced. The UI confirms submission, shows the student's saved
-answers and submission dates, and marks the homework as awaiting grading.
+The save helper returns the submission ID. The UI then calls the authorized
+`grade_submission` service, which adds a validated `grading_result` to that
+same attempt. Students and professors can see per-problem AI points, feedback,
+and an assignment percentage. Failures keep answers saved and allow a retry;
+missing professor references leave the attempt blocked without assigning a zero.
+Recommendation adapters read actual problem scores from graded submissions.
 Repeat submissions create separate attempts; ordinary page reruns do not write.
 Students can review their submitted attempts after navigating away or logging in
 again. Unsubmitted form entries are not autosaved and can be lost on navigation.
@@ -131,13 +135,15 @@ visibility and enrollment.
 history, newest first. This is a trusted server helper; always supply the
 session user's ID in student-facing views.
 
-For the next phase, load a saved submission on the server and call
-`build_grading_payload(submission)`. It returns JSON-safe `schema_version`,
+The grading service calls `build_grading_payload(submission)` on the server. It returns JSON-safe `schema_version`,
 `submission_id`, `assignment_id`, `assignment_title`, `assignment_description`,
 and `problems`: each canonical problem plus its `student_answer`, matched by ID.
-This function is not called by the current submission flow and makes no network
-requests. The future grader must treat student answers as untrusted content,
-validate model output, and write scores through trusted server code.
+The payload builder makes no network requests itself. The grader treats student
+answers as data, validates model output, calculates totals on the server, and
+uses a conditional lease/token to prevent duplicate or stale grade writes.
+The validation script upgrades the old ungraded-only status enum and supports
+`ungraded`, `grading`, `graded`, `failed`, and `blocked`. Apply it before deploying
+to databases using the old submission validator. See the AI guide for retry policy.
 
 The validation script also installs the `homework_submissions` validator and a
 nonunique history index on `(user_id, assignment_id, submitted_at)`. Run it manually
