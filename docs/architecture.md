@@ -4,12 +4,39 @@ The app runs in Streamlit with MongoDB persistence and a Rocky HTTP client.
 There is no separate application API server in this repository: page code calls
 Python helpers directly.
 
+## Course workflow
+
+The interface follows the course-card and course-navigation organization of
+[Canvas's dashboard](https://community.instructure.com/en/kb/articles/664620-how-do-i-use-the-dashboard)
+and [course home](https://community.instructure.com/en/kb/articles/661274-how-do-i-use-the-course-home-page-as-a-student).
+The global sidebar contains Dashboard, Courses, Assignments, and Account (plus
+student Practice). Creation/editing and individual course pages are registered
+hidden routes, reached from their course or assignment.
+
+Dashboards emphasize course cards with a narrow To do panel rather than stacking
+metrics, assignment descriptions, rosters, and grades together. Each course has
+Assignments and Grades, with People for professors. Current database role and
+class ownership/enrollment are checked before course data is read. Students see
+only their own course submissions; professors can open grading review from the
+course grade list. Existing manually recorded class grades appear in student
+course Grades and remain separate from AI assignment scores.
+
+Assignment hubs use searchable rows and a selected group rather than listing
+every group at once. The professor editor selects one question at a time;
+optional partial-credit criteria are collapsed. Submission review has one row
+per attempt and one grading popup, without a duplicate summary table. Student
+submission details select one attempt. Lists remain bounded to five entries
+with overflow popups. Course helpers live in `app/courses/views.py`, outside the
+legacy `pages/` directory, to avoid page-name collisions on refresh.
+
 ## Main modules
 
 | Location | Responsibility |
 | --- | --- |
 | [`app/app.py`](../app/app.py) | Entry point, initial user state, shared styling, and role-scoped navigation. |
-| [`app/pages/home.py`](../app/pages/home.py), [`welcome.py`](../app/pages/welcome.py) | Show login or dispatch to the student's/professor's dashboard. |
+| [`.streamlit/config.toml`](../.streamlit/config.toml) | Academic theme, built-in fonts, and sidebar palette. |
+| [`app/app_pages/`](../app/app_pages/) | Overview, homework, professor creation/editing, classes, practice status, and account routes. |
+| [`app/app_pages/overview.py`](../app/app_pages/overview.py), [`welcome.py`](../app/pages/welcome.py) | Show login or dispatch to the student's/professor's dashboard. |
 | [`app/auth/`](../app/auth) | Registration, password verification, and login rate limiting. |
 | [`app/pages/dashboards/`](../app/pages/dashboards) | Role-specific dashboard views, professor class management, and student Rocky dialog. |
 | [`app/pages/assignment_editor.py`](../app/pages/assignment_editor.py) | Professor edits to assignment details and questions. |
@@ -19,6 +46,7 @@ Python helpers directly.
 | [`app/db/DataBase.py`](../app/db/DataBase.py) | Shared lazy MongoDB connection, CRUD, class queries, and enrollment checks. |
 | [`app/db/assignments.py`](../app/db/assignments.py) | Assignment ownership, scheduling, visibility, and problem edits. |
 | [`app/db/homework_submissions.py`](../app/db/homework_submissions.py) | Authorized homework reads, saved attempts, and professor submission queries. |
+| [`app/db/student_dashboard.py`](../app/db/student_dashboard.py) | Real student enrollment, manual class grades, coursework, and submission metrics. |
 | [`app/db/completed_assignments.py`](../app/db/completed_assignments.py) | Trusted scored completion history, separate from submissions. |
 | [`app/rocky/`](../app/rocky) | AI transport, grading contract, performance analysis, and recommendation backend. |
 
@@ -28,11 +56,15 @@ Registration creates a `student` account. Login returns a session user containin
 `id`, email, name, and `permissions`. Supported login roles are `student` and
 `professor`. Professor access must be provisioned outside public registration.
 
-`app.py` registers the Home page for everyone and explicit Homework/Assignment
-pages for students. Professor dashboard sections, including the assignment editor,
-are selected within the dashboard using session state. A file in `app/pages/`
-does not automatically become a navigable page because the entry point explicitly
-configures navigation.
+`app.py` registers the overview for everyone and shows a role-scoped sidebar.
+Professors have separate classes, creation, and editing pages; students have
+separate homework-list, assignment-taking, and practice-status pages. Both roles
+have an account page. Contextual editing/taking routes are hidden from the menu
+but registered for `st.switch_page`. All route entry scripts live in
+`app/app_pages/`, separate from the helpers in `app/pages/`. A file in `app/pages/` does not
+automatically become navigable because the entry point explicitly configures
+navigation. Selection IDs remain in session state; refreshing in a new session
+does not restore a selected assignment.
 
 Streamlit reruns scripts after interactions. Session state holds the logged-in
 user, selected page/assignment, form widget values, and the Rocky client/answer.
@@ -57,6 +89,37 @@ writes; `app/rocky/grading.py` owns the model prompt and output validation.
 Answers are saved before the model call. Missing references block grading;
 service/validation failures preserve answers without assigning a zero. The
 student Rocky dialog remains a separate question-and-answer interaction.
+
+`app/homework/worker.py` processes saved attempts independently of student
+sessions, with leases and automatic retry scheduling. Grading also produces a
+bounded practice suggestion per problem; `app/homework/study.py` supplies fallback
+guidance and builds topic-based overview recommendations from published grades.
+`app/homework/grades.py` chooses the professor override when present, preserving
+the original AI result. Professor review and overrides use an authorized dialog
+and revision checks.
+
+Rocky grades remain tentative until a professor accepts them or saves an
+override. `professor_grade` stores that confirmed score, including whether its
+source is Rocky or a professor edit. `course_score_summary` groups attempts by
+assignment and uses the latest professor decision, or otherwise the newest
+graded AI attempt. An assignment with a confirmed score cannot also contribute
+tentative points. The student course header refreshes its aggregate score bar
+every five seconds after rechecking current role and enrollment. Only point
+totals reach the chart; answers and grading references stay server-side.
+
+`app/components/compact_list.py` renders five entries plus a See more popup with
+five entries per page. Navigation actions close the list popup before opening a
+different view/dialog. Professor class and roster browsers also use pages of five,
+with database paging for people. `.streamlit/config.toml` provides selectable
+light/dark variants through Streamlit's native settings. Sidebar logout clears
+all user session state; the Account page has no separate logout action.
+
+Professor counts and the editor's submission viewer read `homework_submissions`,
+including ungraded work. Submission detail reads verify the assignment owner and
+current class instructor. The older `completed_assignments` helpers are retained
+for compatibility but no longer supply these UI counts. Student dashboards show
+manual class grades from enrollment records; these are not calculated homework
+averages. Public-web resource searches run only on explicit form submission.
 
 Each professor class has one **Open roster** button. Its dialog shows a searchable,
 paginated roster with class grades, grade editing, and confirmed student removal;
@@ -104,8 +167,9 @@ topics when the response is unusable. Empty histories return insufficient data
 without calling Rocky. Convenience calls own their engine/client, and reused
 engines serialize the complete payload transaction. The adapters also read actual problem scores from graded homework, preserving
 partial credit and snapshot topics. Homework grading is wired to submit/retry and
-the student/professor views. Recommendation widgets are not yet in the dashboard;
-callers must enforce the access rules below before requesting database reports.
+the student/professor views. The student overview shows topic practice suggestions
+from its latest graded attempts; the broader recommendation engine remains a
+separate backend. Callers must enforce the access rules below before requesting database reports.
 
 ## Access and scheduling rules
 

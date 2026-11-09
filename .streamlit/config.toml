@@ -1,0 +1,40 @@
+# Academic palette adapted from the Streamlit skill's minimal theme.
+# Built-in fonts keep the interface independent of external font services.
+[browser]
+gatherUsageStats = false
+
+[theme]
+showWidgetBorder = true
+showSidebarBorder = false
+baseRadius = "8px"
+buttonRadius = "6px"
+font = "sans-serif"
+headingFont = "sans-serif"
+headingFontWeights = [600, 600, 600, 600, 600, 600]
+
+[theme.light]
+primaryColor = "#254D70"
+backgroundColor = "#FFFFFF"
+secondaryBackgroundColor = "#F5F7FA"
+textColor = "#242D35"
+linkColor = "#254D70"
+borderColor = "#DFE5EB"
+dataframeHeaderBackgroundColor = "#F5F7FA"
+chartCategoricalColors = ["#254D70", "#B58937", "#557565", "#9C6262"]
+
+[theme.dark]
+primaryColor = "#4179A3"
+backgroundColor = "#111D29"
+secondaryBackgroundColor = "#1C2D3D"
+textColor = "#EEF1F5"
+linkColor = "#9ACAF0"
+borderColor = "#415365"
+dataframeHeaderBackgroundColor = "#1C2D3D"
+chartCategoricalColors = ["#9ACAF0", "#E8C46D", "#97C9AE", "#DDA5A5"]
+
+[theme.sidebar]
+backgroundColor = "#172D40"
+secondaryBackgroundColor = "#243F56"
+textColor = "#FAF8F2"
+primaryColor = "#E8C46D"
+borderColor = "#3E5366"

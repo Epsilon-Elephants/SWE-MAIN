@@ -57,7 +57,7 @@ def validate_recommendation_item(item: Dict[str, Any]) -> TopicRecommendation:
     reason = reason.strip()
     priority_raw = str(item.get("priority", "medium")).lower()
     priority: PriorityLevel = priority_raw if priority_raw in ("high", "medium", "low") else "medium"
-    
+
     concepts_raw = item.get("concepts_to_review", [])
     if isinstance(concepts_raw, list):
         concepts = [str(c).strip() for c in concepts_raw if str(c).strip()]
@@ -72,4 +72,3 @@ def validate_recommendation_item(item: Dict[str, Any]) -> TopicRecommendation:
         reason=reason,
         concepts_to_review=concepts
     )
-

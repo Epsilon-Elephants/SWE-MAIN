@@ -29,8 +29,8 @@ precedence over fallback values in Streamlit secrets. Do not put real credential
 in `.env.example` or documentation; `.env` is ignored by Git.
 
 Streamlit deployments can supply the same keys through Streamlit secrets. If you
-create a local `.streamlit/secrets.toml`, keep it out of Git; the current
-`.gitignore` does not explicitly ignore that file.
+create a local `.streamlit/secrets.toml`, keep it out of Git; `.gitignore`
+explicitly excludes that file and local environment variants.
 
 ```bash
 python -m streamlit run app/app.py
@@ -39,11 +39,60 @@ python -m streamlit run app/app.py
 Use the local URL printed by Streamlit. Launching `app/app.py` as an ordinary
 Python script does not start the Streamlit application.
 
-The Rocky modules import `requests`, which is currently provided transitively
-by Streamlit rather than declared directly in `requirements.txt`. If you reuse
-the client outside this application environment, install `requests` explicitly.
+Application dependencies have version bounds, including an explicit `requests`
+dependency for Rocky. Streamlit 1.63 or newer is required for the registered page
+visibility and UI APIs used here. The theme lives in `.streamlit/config.toml` and
+uses built-in fonts. A lockfile is not supplied yet.
 
 ## Accounts and database preparation
+
+### Appearance and lists
+
+Choose **Settings → Theme → Light / Dark / Use system setting** in Streamlit's
+top-right menu. `.streamlit/config.toml` supplies both native variants, including
+table, widget, and sidebar colors. The Account page explains where to switch;
+**Log out** appears only in the sidebar.
+
+The dashboard shows course cards and a short To do panel. Open a course for
+Assignments, Grades, or professor People management. Assignment hubs show
+searchable compact rows with one selected group. Lists show at most five entries;
+**See more** opens a popup with five per page. Rosters and enrollment dialogs also
+fetch five people per page. The assignment editor selects one question at a time;
+student submission details select one attempt. Study plans and recent visits
+remain available under collapsed sections rather than expanding the dashboard.
+
+New/edited questions require content, a topic, a professor reference answer, and
+positive points. `authored_problem`/`authored_problems` enforce this in database
+write helpers and publication checks; UI handlers validate too. Blank partial-credit
+guidance delegates scoring discretion to Rocky. The legacy normalization path
+continues to support historical snapshots. The JSON Schema's `$defs.authored`
+describes stricter authoring without invalidating old saved submissions.
+
+### Background grading
+
+The app starts one shared background grader per server process. Accepted answers
+are the durable MongoDB queue, so students can keep working or leave the page.
+For a host that suspends idle Streamlit processes, set
+`HOMEWORK_GRADING_WORKER=external` in the Streamlit environment and run an
+always-on worker with the same DB and Rocky configuration:
+
+```bash
+PYTHONPATH=app .venv/bin/python -m homework.worker
+```
+
+Use a process supervisor to restart it. Temporary Rocky outages retry
+automatically; invalid scores/input require an explicit retry. Apply the updated
+`docs/assignment-validation.js` to add retry, practice-suggestion, and professor
+override validation and the queue index. Existing submissions require no backfill.
+
+Rocky scores now remain tentative until a professor confirms them or saves an
+override. The student course header shows confirmed points, unconfirmed Rocky
+points, and a combined estimate in a small score bar, refreshed every five
+seconds. The most recent professor decision wins per assignment; the same
+assignment's Rocky result and other attempts cannot add duplicate points.
+Existing professor overrides count as confirmed, while historical AI-only
+results remain tentative. `professor_grade.source` records `rocky` or
+`professor` for new confirmations; it is optional for legacy documents.
 
 Public registration creates students. There is no public professor signup or
 role-promotion screen. A development professor account must have
@@ -62,7 +111,7 @@ database, with the shell's working directory at the repository root, and run:
 load("docs/assignment-validation.js")
 ```
 
-This script changes database validators and creates a submission-history index;
+This script changes database validators and creates assignment/submission indexes;
 it is a manual database setup action, not an app-startup step. It does not seed
 users/classes, backfill old records, or check cross-collection relationships.
 See [Assignments and submissions](assignments.md) before applying it.

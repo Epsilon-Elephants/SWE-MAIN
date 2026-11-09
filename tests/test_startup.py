@@ -47,7 +47,7 @@ def test_fresh_streamlit_process_with_app_directory_first(mode):
 
             app = AppTest.from_file(str(root / "app/app.py"), default_timeout=10).run()
             assert not app.exception, [error.message for error in app.exception]
-            assert [title.value for title in app.title] == ["Welcome"]
+            assert "Welcome" in [title.value for title in app.main.title]
             assert {button.label for button in app.button} >= {"Log in", "Create account"}
 
         assert "app" not in sys.modules, "A business-module import executed app/app.py."
