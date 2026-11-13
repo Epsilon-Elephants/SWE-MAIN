@@ -160,3 +160,53 @@ def test_practice_requires_student_role():
     app.session_state.user = {"id": str(ObjectId()), "permissions": "professor"}
     app.run()
     assert app.error[0].value == "Sign in with a student account to view this page."
+
+
+@pytest.mark.parametrize("ratio, shown", [(0.695, "69%"), (0.29, "29%"), (0.7, "70%"), (1.0, "100%"), (0.0, "0%")])
+def test_percentages_round_down_so_scores_below_the_cutoff_never_show_70(ratio, shown):
+    from homework.practice_views import _percent
+    assert _percent(ratio) == shown
+
+
+def _plan_report():
+    return RecommendationReport(
+        target_type="student", ranked_weaknesses=[], raw_response='{"recommendations": []}',
+        recommendations=[TopicRecommendation("Quantifiers", "high", "Lowest topic score.", [])],
+    )
+
+
+def test_repeat_plan_requests_wait_for_the_cooldown(student):
+    app, loader = _practice_app(student, _overview([WEAK]))
+    clock = [1000.0]
+    with loader, patch("homework.practice_views.monotonic", side_effect=lambda: clock[0]), patch(
+        "homework.practice_views.RecommendationEngine",
+    ) as engine:
+        plan = engine.return_value.get_student_recommendations_from_db
+        plan.return_value = _plan_report()
+        _run_practice(app)
+        app.button(key="practice_build_plan").click().run()
+        clock[0] += 30
+        app.button(key="practice_build_plan").click().run()
+        assert plan.call_count == 1
+        assert "A plan was requested in the last 2 minutes. Please wait a moment before requesting another." in [
+            info.value for info in app.info]
+        assert "Lowest topic score." in [row.value for row in app.markdown]
+        clock[0] += 91
+        app.button(key="practice_build_plan").click().run()
+    assert not app.exception
+    assert plan.call_count == 2
+
+
+def test_unexpected_plan_error_shows_generic_message_and_allows_retry(student):
+    app, loader = _practice_app(student, _overview([WEAK]))
+    with loader, patch("homework.practice_views.RecommendationEngine") as engine:
+        plan = engine.return_value.get_student_recommendations_from_db
+        plan.side_effect = KeyError("unexpected data shape")
+        _run_practice(app)
+        app.button(key="practice_build_plan").click().run()
+        assert not app.exception
+        assert [error.value for error in app.error] == ["Could not build a review plan right now. Please try again later."]
+        plan.side_effect, plan.return_value = None, _plan_report()
+        app.button(key="practice_build_plan").click().run()
+    assert not app.exception
+    assert plan.call_count == 2

@@ -1,5 +1,7 @@
 """Student Practice page: topic review built from graded homework, plus an optional Rocky plan."""
 import logging
+import math
+from time import monotonic
 
 import streamlit as st
 from dotenv import load_dotenv
@@ -16,6 +18,10 @@ PLAN_KEY = "practice_review_plan"
 # Rocky's full plan uses about 800 tokens. At the engine's 400-token default it is
 # cut off and returns no text, so the page would always show the score-based fallback.
 PLAN_MAX_TOKENS = 1000
+# Rocky is shared and handles one request at a time. A request can't be cancelled once
+# sent, so repeat clicks within this window are ignored instead of queuing more work.
+PLAN_COOLDOWN_SECONDS = 120
+PLAN_REQUESTED_KEY = "practice_plan_requested_at"
 PRIORITY_ICONS = {"high": ":material/priority_high:", "medium": ":material/flag:", "low": ":material/check_circle:"}
 
 
@@ -26,11 +32,16 @@ def _open_assignment(assignment_id):
     st.switch_page("app_pages/homework_assignment.py")
 
 
+def _percent(ratio):
+    """Round down so a score just under the review cutoff never displays as the cutoff."""
+    return f"{math.floor(round(ratio * 100, 6))}%"
+
+
 def _render_topic(item):
     with st.container(border=True):
         name, score = st.columns([5, 1], vertical_alignment="center")
         name.markdown(f"**{item['topic']}**")
-        score.caption(f"{item['ratio']:.0%}")
+        score.caption(_percent(item["ratio"]))
         st.progress(max(0.0, min(1.0, item["ratio"])))
         st.write(item["recommendation"])
         source = " · ".join(filter(None, [item.get("assignment_title"), item.get("class_name")]))
@@ -65,13 +76,23 @@ def _render_plan_section(user_id, has_scores):
     )
     if st.button("Build my review plan", key="practice_build_plan", icon=":material/auto_awesome:",
                  disabled=not has_scores, help=None if has_scores else "Available once homework is graded."):
-        try:
-            with st.spinner("Rocky is building your plan..."):
-                st.session_state[PLAN_KEY] = {"user_id": user_id, **_request_plan(user_id)}
-        except (ValueError, RuntimeError, PyMongoError):
-            logging.exception("Could not build review plan")
-            st.session_state.pop(PLAN_KEY, None)
-            st.error("Could not build a review plan right now. Please try again later.")
+        requested_by, requested_at = st.session_state.get(PLAN_REQUESTED_KEY, (None, None))
+        wait = (PLAN_COOLDOWN_SECONDS - (monotonic() - requested_at)
+                if requested_by == user_id and requested_at is not None else 0)
+        if wait > 0:
+            st.info(f"A plan was requested in the last {PLAN_COOLDOWN_SECONDS // 60} minutes. "
+                    "Please wait a moment before requesting another.")
+        else:
+            # Record the request before sending it, so a click while it loads is also ignored.
+            st.session_state[PLAN_REQUESTED_KEY] = (user_id, monotonic())
+            try:
+                with st.spinner("Rocky is building your plan..."):
+                    st.session_state[PLAN_KEY] = {"user_id": user_id, **_request_plan(user_id)}
+            except Exception:  # Show students a friendly message for any failure, and log the details.
+                logging.exception("Could not build review plan")
+                st.session_state.pop(PLAN_KEY, None)
+                st.session_state.pop(PLAN_REQUESTED_KEY, None)  # Allow an immediate retry after an error.
+                st.error("Could not build a review plan right now. Please try again later.")
     plan = st.session_state.get(PLAN_KEY)
     if not plan or plan.get("user_id") != user_id:
         return
