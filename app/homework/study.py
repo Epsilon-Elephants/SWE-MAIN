@@ -26,6 +26,24 @@ def practice_suggestion(problem, points_awarded):
     return f"Focus your next practice on {name}: {practice} Use the grading feedback to check the step you found difficult."
 
 
+REVIEW_THRESHOLD = 0.70  # Matches the Rocky recommendation engine's weakness cutoff.
+
+
+def practice_topics(overview):
+    """Split topic recommendations into review-first and keep-practicing groups.
+
+    Each topic keeps its weakest latest score and gains the source assignment's
+    public title and course name so the page can link back to it.
+    """
+    sources = {str(row["_id"]): row for row in overview.get("assignments", [])}
+    review, strong = [], []
+    for item in overview.get("recommendations", []):
+        source = sources.get(item.get("assignment_id"), {})
+        row = {**item, "assignment_title": source.get("title"), "class_name": source.get("class_name")}
+        (review if item["ratio"] < REVIEW_THRESHOLD else strong).append(row)
+    return review, strong
+
+
 def submission_recommendations(submissions):
     """Latest graded attempt per assignment; prioritize the weakest listed topics."""
     topics, assignments = {}, set()

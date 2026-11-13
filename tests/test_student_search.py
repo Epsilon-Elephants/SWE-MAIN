@@ -13,9 +13,10 @@ def student_app():
         "id": str(ObjectId()), "email": "student@example.com",
         "permissions": "student", "first_name": "Student",
     }
-    with patch("pages.dashboards.student.student.load_student_overview", return_value={
-        "classes": [], "assignments": [], "attempts": 0, "awaiting_grading": 0,
-    }), patch("pages.dashboards.student.student.get_recent", return_value=[]):
+    overview = {"classes": [], "assignments": [], "attempts": 0, "awaiting_grading": 0}
+    with patch("pages.dashboards.student.student.load_student_overview", return_value=overview), patch(
+        "homework.practice_views.load_student_overview", return_value=overview,
+    ), patch("pages.dashboards.student.student.get_recent", return_value=[]):
         yield app
 
 
