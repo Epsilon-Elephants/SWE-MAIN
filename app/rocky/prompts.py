@@ -138,4 +138,3 @@ def build_professor_recommendation_prompt(
     )
 
     return "\n".join(lines)
-

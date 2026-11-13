@@ -21,7 +21,7 @@ class TestAssignmentDates(unittest.TestCase):
         posted = datetime(2026, 10, 19, 12, tzinfo=timezone(timedelta(hours=-4)))
         with patch.object(db, "read_one", return_value={}), patch.object(db, "insert_one") as insert:
             create_assignment("Homework", str(ObjectId()), class_id=ObjectId(),
-                              posted=posted, due_date=date(2026, 10, 20), problems=["Solve this"])
+                              posted=posted, due_date=date(2026, 10, 20), problems=[{"content": "Solve this", "topic": "Logic", "reference_answer": "Solution"}])
         document = insert.call_args.args[1]
         self.assertEqual(document["posted"], datetime(2026, 10, 19, 16, tzinfo=timezone.utc))
         self.assertEqual(document["due_date"], datetime(2026, 10, 20, tzinfo=timezone.utc))
@@ -30,12 +30,12 @@ class TestAssignmentDates(unittest.TestCase):
         for posted, due in [(date(2026, 2, 2), date(2026, 2, 1)), ("tomorrow", None)]:
             with self.subTest(posted=posted), patch.object(db, "read_one", return_value={}), patch.object(db, "insert_one") as insert:
                 with self.assertRaises(ValueError):
-                    create_assignment("Homework", str(ObjectId()), class_id=ObjectId(), posted=posted, due_date=due, problems=["Solve this"])
+                    create_assignment("Homework", str(ObjectId()), class_id=ObjectId(), posted=posted, due_date=due, problems=[{"content": "Solve this", "topic": "Logic", "reference_answer": "Solution"}])
                 insert.assert_not_called()
 
     def test_partial_updates_validate_against_existing_dates(self):
         existing = {"posted": datetime(2026, 2, 2), "due_date": datetime(2026, 2, 10),
-                    "problems": [{"content": "Solve this"}]}
+                    "problems": [{"content": "Solve this", "topic": "Logic", "reference_answer": "Solution"}]}
         with patch.object(db, "read_one", return_value=existing), patch.object(db, "update_one", return_value=MagicMock(matched_count=1)) as update:
             with self.assertRaises(ValueError):
                 update_assignment(ObjectId(), "professor", "Homework", due_date=date(2026, 2, 1))

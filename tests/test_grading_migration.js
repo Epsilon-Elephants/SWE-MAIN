@@ -18,6 +18,7 @@ const db = {
   createCollection: (name, options) => { stored[name] = options; },
   runCommand: (command) => { stored[command.collMod] = command; return { ok: 1 }; },
   homework_submissions: { createIndex: () => {} },
+  assignments: { createIndex: () => {} },
 };
 function run() { vm.runInNewContext(source, { db }); }
 run();

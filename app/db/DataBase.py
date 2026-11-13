@@ -1,7 +1,6 @@
 import streamlit as st
 import pymongo as pM
 from pymongo import ReturnDocument
-from pymongo.errors import PyMongoError
 from dotenv import load_dotenv
 
 import os
@@ -45,11 +44,10 @@ class DataBase:
             if not db_name:
                 db_name = st.secrets["DB_NAME"]
 
-            client = pM.MongoClient(uri)
+            client = pM.MongoClient(uri, serverSelectionTimeoutMS=5000, connectTimeoutMS=5000)
             self._db = client[db_name]
-        except PyMongoError as e:
-            print(f"Error connecting to MongoDB: {e}")
-            return None
+        except (KeyError, FileNotFoundError) as error:
+            raise RuntimeError("Database is not configured.") from error
         return self._db
 
     def _get_collection(self, collection_name: str):
@@ -79,8 +77,10 @@ class DataBase:
         return result
 
     # READ: return a matching document, or None if not found.
-    def read_one(self, collection_name: str, query: dict):
+    def read_one(self, collection_name: str, query: dict, *, sort=None):
         collection = self._get_collection(collection_name)
+        if sort is not None:
+            return collection.find_one(query, sort=sort)
         return collection.find_one(query)
 
     # find: return all matching document(s), or None if not found.
@@ -94,7 +94,7 @@ class DataBase:
         return list(collection.aggregate(pipeline, maxTimeMS=5000))
 
     def list_classes_page(self, search="", page=0, page_size=25, instructor_id=None, active_only=False):
-        if page < 0 or page_size not in (10, 25, 50, 100):
+        if page < 0 or page_size not in (5, 10, 25, 50, 100):
             raise ValueError("Invalid pagination settings.")
         query = {}
         if active_only:
@@ -132,6 +132,8 @@ class DataBase:
 
     @staticmethod
     def _object_id(value, label):
+        if not isinstance(value, (str, ObjectId)):
+            raise ValueError(f"Invalid {label}.")
         try:
             return value if isinstance(value, ObjectId) else ObjectId(value)
         except (InvalidId, TypeError) as error:
@@ -140,7 +142,7 @@ class DataBase:
     def list_students_for_class(
         self, class_id, enrolled: bool, search="", page=0, page_size=25,
     ):
-        if page < 0 or page_size not in (10, 25, 50, 100):
+        if page < 0 or page_size not in (5, 10, 25, 50, 100):
             raise ValueError("Invalid pagination settings.")
         class_id = self._object_id(class_id, "class ID")
         user_match = {"permissions": "student"}
@@ -241,6 +243,11 @@ class DataBase:
     def update_one(self, collection_name: str, query: dict, fields: dict):
         collection = self._get_collection(collection_name)
         return collection.update_one(query, {"$set": fields})
+
+    # UPSERT: set fields on a maching document, creating it if missing.
+    def upsert_one(self,collection_name: str, query: dict, fields: dict):
+        collection = self._get_collection(collection_name)
+        return collection.update_one(query, {"$set": fields}, upsert=True)
 
     # DELETE: delete a single matching document.
     def delete_one(self, collection_name: str, query: dict):

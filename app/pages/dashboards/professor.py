@@ -1,18 +1,17 @@
 import logging
-from datetime import date, datetime, time, timedelta, timezone
+from datetime import date, datetime, time, timezone
 
 import streamlit as st
 from pymongo.errors import PyMongoError
 
-from components.problem_editor import problem_editor
+from components.problem_editor import grading_fields, problem_editor
 from db.DataBase import db
 from db.assignments import create_assignment, list_assignments_for_professor
 from db.homework_submissions import summarize_submissions
-from pages.assignment_editor import show_assignment_editor
 from pages.dashboards.dashboard import Dashboard
-from pages.dashboards.professor_classes import render_professor_classes
-from components.dashboard_header import render_dashboard_header
-from pages.settings import SETTINGS_PAGE, load_settings_page
+from components.compact_list import compact_list, close_compact_list
+from components.course_cards import course_cards, assignment_row
+from homework.schema import authored_problem
 
 logger = logging.getLogger(__name__)
 
@@ -44,9 +43,8 @@ def _format_date(value):
 
 
 def _due_end(assignment):
-    """Due dates are stored as midnight UTC, so students have the whole due day."""
-    due = _as_utc(assignment.get("due_date"))
-    return due + timedelta(days=1) if due else None
+    """Use the stored UTC deadline, consistently with the student homework page."""
+    return _as_utc(assignment.get("due_date"))
 
 
 def assignment_state(assignment, now=None):
@@ -86,8 +84,8 @@ def _load_assignment_context(professor_id, assignments):
     return class_names, completions
 
 
-@st.dialog("Create assignment")
-def _show_create_assignment_dialog(professor_id):
+def render_create_assignment(professor_id):
+    """Author homework on a dedicated page, separate from the dashboard."""
     try:
         classes = list(db.find("classes", {
             "instructor_id": db._object_id(professor_id, "professor ID"),
@@ -102,12 +100,16 @@ def _show_create_assignment_dialog(professor_id):
         return
     class_names = {str(classroom["_id"]): classroom["name"] for classroom in classes}
     with st.form("create_assignment_form"):
-        class_id = st.selectbox("Class", options=list(class_names), format_func=class_names.get)
+        course_ids = list(class_names)
+        preferred = st.session_state.get("create_course_id")
+        class_id = st.selectbox("Class", options=course_ids, format_func=class_names.get,
+                                index=course_ids.index(preferred) if preferred in course_ids else 0)
         title = st.text_input("Assignment title")
         description = st.text_area("Description")
         posted = st.date_input("Posted date", help="Students can see this assignment starting on this date (UTC).")
-        due_date = st.date_input("Due date", help="Students can still complete the assignment after this date.")
+        due_date = st.date_input("Due date", help="Deadline: midnight UTC at the start of the selected date. Late submissions are accepted.")
         first_problem = problem_editor("First problem", key="create_assignment_first_problem")
+        first_fields = grading_fields(first_problem)
         st.caption("Post homework to make it available on the posted date, or finish later to save a private draft.")
         submitted = st.form_submit_button("Post homework", type="primary")
         finish_later = st.form_submit_button("Finish later")
@@ -122,146 +124,97 @@ def _show_create_assignment_dialog(professor_id):
                 raise ValueError("Due date cannot be before the posted date.")
             if submitted and not first_problem.strip():
                 raise ValueError("At least one problem is required.")
-            create_assignment(
+            assignment_id = create_assignment(
                 title, professor_id, description, class_id=class_id,
                 posted=posted, due_date=due_date, status="published" if submitted else "draft",
-                problems=[first_problem] if first_problem.strip() else [],
+                problems=[authored_problem(first_fields)] if first_problem.strip() else [],
             )
         except (ValueError, RuntimeError, PyMongoError) as error:
-            st.error(str(error))
+            logger.exception("Assignment creation failed")
+            st.error(str(error) if isinstance(error, ValueError) else "Could not create the assignment. Try again.")
         else:
             st.session_state.professor_assignment_success = (
                 "Homework posted (available from the posted date)." if submitted
                 else "Draft saved. Open it under Draft assignments to finish later."
             )
-            st.rerun()
+            st.session_state.selected_assignment_id = assignment_id
+            origin_course = st.session_state.pop("create_course_id", None)
+            st.session_state.professor_assignment_return_page = (
+                "app_pages/course.py" if origin_course == str(class_id) else "app_pages/assignments.py"
+            )
+            st.switch_page("app_pages/edit_assignment.py")
 
 
-def _open_assignment(assignment_id):
+def _open_assignment(assignment_id, *, return_page="app_pages/assignments.py"):
+    close_compact_list()
     st.session_state.selected_assignment_id = assignment_id
+    st.session_state.professor_assignment_return_page = return_page
     st.session_state.pop("professor_enrollment_class", None)
     st.session_state.pop("professor_roster_class", None)
+    st.switch_page("app_pages/edit_assignment.py")
 
 
-def _render_assignment_card(assignment, state, class_name=None, summary=None):
-    assignment_id = assignment["_id"]
-    with st.container(border=True, key=f"assignment_card_{assignment_id}"):
-        st.markdown(f"**{assignment.get('title', 'Untitled')}**")
-        details = [STATE_LABELS[state]]
-        if class_name:
-            details.append(class_name)
-        if state == "scheduled":
-            details.append(f"Posts {_format_date(assignment.get('posted'))}")
-        if assignment.get("due_date"):
-            details.append(f"Due {_format_date(assignment.get('due_date'))}")
-        problem_count = len(assignment.get("problems", []))
-        details.append(f"{problem_count} problem{'s' if problem_count != 1 else ''}")
-        st.caption(" · ".join(details))
-        if description := assignment.get("description"):
-            st.write(description)
-        if state != "draft":
-            summary = summary or {"students": 0, "attempts": 0}
-            st.caption(
-                f"{summary['students']} student{'s' if summary['students'] != 1 else ''} submitted"
-                f" · {summary['attempts']} attempt{'s' if summary['attempts'] != 1 else ''}"
-            )
-        st.button(
-            "Open", key=f"open_{assignment_id}",
-            on_click=_open_assignment, args=(assignment_id,),
-        )
+def _render_assignment_card(assignment, state, class_name=None, summary=None, *, return_page="app_pages/assignments.py"):
+    details = [class_name] if class_name else []
+    if assignment.get("due_date"):
+        details.append(f"Due {_format_date(assignment['due_date'])}")
+    count = len(assignment.get("problems", []))
+    details.append(f"{count} question{'s' if count != 1 else ''}")
+    if summary:
+        details.append(f"{summary['students']} submitted")
+    assignment_row(assignment.get("title", "Untitled"), " · ".join(details), STATE_LABELS[state],
+                   key=f"open_{assignment['_id']}", open_assignment=lambda: _open_assignment(assignment["_id"], return_page=return_page))
 
 
-def _render_overview(states, completions):
-    now = datetime.now(timezone.utc)
-    week_from_now = now + timedelta(days=7)
-    open_count = sum(state in {"open", "past_due"} for _, state in states)
-    due_soon = sum(
-        state == "open" and (due_end := _due_end(assignment)) is not None and due_end <= week_from_now
-        for assignment, state in states
-    )
-    past_due = sum(state == "past_due" for _, state in states)
-    attempts = sum(summary.get("attempts", 0) for summary in completions.values())
-    columns = st.columns(4)
-    columns[0].metric("Open assignments", open_count)
-    columns[1].metric("Due in 7 days", due_soon)
-    columns[2].metric("Past due", past_due)
-    columns[3].metric("Total submissions", attempts)
+def render_assignment_groups(assignments, class_names, completions, *, key="professor_assignments", return_page="app_pages/assignments.py"):
+    search, group = st.columns([3, 2])
+    query = search.text_input("Find an assignment", placeholder="Search assignments", key=f"{key}_search").strip().casefold()
+    category = group.selectbox("Assignment group", ["Published", "Drafts", "Closed"], key=f"{key}_group")
+    allowed = {"Published": {"open", "past_due", "scheduled"}, "Drafts": {"draft"}, "Closed": {"closed"}}[category]
+    rows = sorted(((row, assignment_state(row)) for row in assignments
+                   if query in row.get("title", "").casefold() and assignment_state(row) in allowed),
+                  key=lambda pair: _due_sort_key(pair[0]))
+    if not rows:
+        st.caption("No assignments in this group.")
+    def render(pair):
+        assignment, state = pair
+        _render_assignment_card(assignment, state, class_names.get(assignment.get("class_id")), completions.get(assignment["_id"]), return_page=return_page)
+    compact_list(rows, render, title=f"More {category.lower()} assignments", key=key)
 
 
 class professorDash(Dashboard):
-    def __init__(self):
-        super().__init__()
-
     def load_dash(self):
-        if st.session_state.get("professor_page") == SETTINGS_PAGE:
-            load_settings_page()
-            return
-
-        render_dashboard_header(
-            "Professor Dashboard",
-            f"Welcome back, {st.session_state.user.get('first_name') or 'Professor'}",
-        )
-
-        professor_id = st.session_state.user.get("id")
+        user = st.session_state.get("user") or {}
+        st.title("Dashboard")
+        st.caption(f"Welcome back, {user.get('first_name') or 'Professor'}")
+        professor_id = user.get("id")
         if not professor_id:
             st.error("Your professor account is missing an ID.")
             return
-
-        assignment_id = st.session_state.get("selected_assignment_id")
-        if assignment_id:
-            show_assignment_editor(assignment_id, professor_id)
-            return
-
         try:
             assignments = list_assignments_for_professor(professor_id)
-        except (ValueError, RuntimeError, PyMongoError) as error:
-            assignments = None
-            load_error = error
-        else:
-            load_error = None
-            states = [(assignment, assignment_state(assignment)) for assignment in assignments]
             class_names, completions = _load_assignment_context(professor_id, assignments)
-            _render_overview(states, completions)
-
-        assignments_column, classes_column = st.columns([2, 1], gap="large")
-        with assignments_column:
-            st.subheader("Active assignments")
-            if message := st.session_state.pop("professor_assignment_success", None):
-                st.success(message)
-            if st.button("Create assignment", type="primary", icon=":material/add:"):
-                st.session_state.pop("professor_enrollment_class", None)
-                st.session_state.pop("professor_roster_class", None)
-                _show_create_assignment_dialog(professor_id)
-
-            if load_error is not None:
-                st.error(f"Could not load assignments: {load_error}")
-            else:
-                def render(assignment, state):
-                    _render_assignment_card(
-                        assignment, state,
-                        class_names.get(assignment.get("class_id")),
-                        completions.get(assignment["_id"]),
-                    )
-
-                active = sorted(
-                    [pair for pair in states if pair[1] in {"open", "past_due", "scheduled"}],
-                    key=lambda pair: _due_sort_key(pair[0]),
-                )
-                if not active:
-                    st.info("No active assignments yet.")
-                for assignment, state in active:
-                    render(assignment, state)
-
-                drafts = [pair for pair in states if pair[1] == "draft"]
-                if drafts:
-                    with st.expander(f"Draft assignments ({len(drafts)})"):
-                        for assignment, state in drafts:
-                            render(assignment, state)
-                closed = [pair for pair in states if pair[1] == "closed"]
-                if closed:
-                    with st.expander(f"Closed assignments ({len(closed)})"):
-                        for assignment, state in closed:
-                            render(assignment, state)
-
-        with classes_column:
-            render_professor_classes(professor_id)
+        except (ValueError, RuntimeError, PyMongoError):
+            st.error("Could not load your courses. Try again.")
+            return
+        if message := st.session_state.pop("professor_assignment_success", None):
+            st.success(message)
+        if st.button("Create assignment", type="primary", icon=":material/add:"):
+            st.switch_page("app_pages/create_assignment.py")
+        main, todo = st.columns([3, 1], gap="large")
+        with main:
+            st.subheader("Courses")
+            courses = [{"_id": cid, "name": name} for cid, name in class_names.items()]
+            if not courses:
+                st.caption("Your courses will appear here once they are set up.")
+            course_cards(courses, key="professor_courses")
+        with todo:
+            st.subheader("To do")
+            upcoming = sorted((row for row in assignments if assignment_state(row) in {"open", "past_due", "scheduled"}), key=_due_sort_key)
+            if not upcoming:
+                st.caption("No active assignments.")
+            def render(row):
+                _render_assignment_card(row, assignment_state(row), class_names.get(row.get("class_id")), completions.get(row["_id"]))
+            compact_list(upcoming, render, title="More active assignments", key="professor_active")
+        if st.button("View all assignments", key="professor_all_assignments"):
+            st.switch_page("app_pages/assignments.py")

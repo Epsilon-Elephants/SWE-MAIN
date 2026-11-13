@@ -29,3 +29,8 @@ def block_live_http(monkeypatch):
         raise AssertionError("Mock HTTP requests in tests; live HTTP is disabled.")
 
     monkeypatch.setattr(requests.sessions.Session, "request", unexpected_request)
+
+
+@pytest.fixture(autouse=True)
+def disable_automatic_grading_worker(monkeypatch):
+    monkeypatch.setenv("HOMEWORK_GRADING_WORKER", "external")
