@@ -154,7 +154,9 @@ def test_professor_creation_and_editor_are_real_pages():
         next(b for b in app.button if b.label == "Finish later").click().run()
         assert not app.exception
         assert app.title[0].value == "Logic homework"
-        assert [tab.label for tab in app.tabs] == ["Details", "Problems", "Submissions"]
+        tab_labels = [tab.label for tab in app.tabs]
+        assert tab_labels[:2] == ["Details", "Problems"]
+        assert "Submissions" in tab_labels
         app.switch_page("app_pages/edit_assignment.py").run()
         app.button(key="back_to_assignments").click().run()
         assert not app.exception

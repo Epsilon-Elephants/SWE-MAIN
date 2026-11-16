@@ -6,6 +6,7 @@ from datetime import timezone
 import streamlit as st
 from pymongo.errors import PyMongoError
 
+from components.logic_symbol_editor import logic_symbol_editor
 from db.DataBase import db
 from components.compact_list import compact_list, close_compact_list
 from components.course_cards import assignment_row
@@ -178,10 +179,9 @@ def show_homework_assignment():
                 st.subheader(f"Question {number}")
                 st.write(problem["content"])
                 st.caption(f"{problem['points']:g} points" + (f" · {problem['topic']}" if problem["topic"] else ""))
-                answers[problem["problem_id"]] = st.text_area(
+                answers[problem["problem_id"]] = logic_symbol_editor(
                     f"Answer to question {number}",
                     key=f"homework_answer_{user['id']}_{assignment_id}_{problem['problem_id']}",
-                    height=160,
                 )
             submitted = st.form_submit_button("Submit homework", type="primary", icon=":material/send:")
         if submitted:
