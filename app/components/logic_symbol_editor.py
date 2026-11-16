@@ -5,11 +5,11 @@ import streamlit as st
 
 LOGIC_SYMBOL_CATEGORIES = (
     ("Propositional Logic", (
-        ("~", "NOT"),
-        ("&", "AND"),
-        ("→", "IF/THEN"),
-        ("↔", "BICONDITIONAL"),
-        ("∨", "OR"),
+        ("~", "Not"),
+        ("&", "And"),
+        ("→", "Implies"),
+        ("↔", "Biconditional"),
+        ("∨", "Or"),
     )),
     ("Predicate Logic", (
         ("∀", "Universal quantifier"),
@@ -23,6 +23,7 @@ LOGIC_SYMBOL_CATEGORIES = (
         ("⊢", "Therefore"),
         ("Φ", "Greek Phi"),
         ("Ψ", "Greek Psi"),
+        ("⥽", "Strict Conditional (Fish Hook)"),
     )),
 )
 
