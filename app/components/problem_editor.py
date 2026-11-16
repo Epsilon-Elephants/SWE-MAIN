@@ -25,17 +25,28 @@ def display_problem(content: str):
     st.write(content)
 
 
-def grading_fields(content: str, problem=None):
+def grading_fields(content: str, problem=None, *, key_prefix: str):
     """Instructor-only fields for the versioned short-answer problem contract."""
     problem = problem or {}
-    points = st.number_input("Points", min_value=0.01, value=float(problem.get("points", 1.0)), step=1.0)
-    topic = st.text_input("Topic", value=problem.get("topic", ""))
-    reference_answer = st.text_area(
-        "Reference answer (private)", value=problem.get("reference_answer", ""),
+    points = st.number_input(
+        "Points", min_value=0.01, value=float(problem.get("points", 1.0)),
+        step=1.0, key=f"{key_prefix}_points",
+    )
+    topic = st.text_input(
+        "Topic", value=problem.get("topic", ""), key=f"{key_prefix}_topic",
+    )
+    reference_answer = logic_symbol_editor(
+        "Reference answer (private)",
+        key=f"{key_prefix}_reference_answer",
+        initial_content=problem.get("reference_answer", ""),
+        height=120,
         help="Required for Rocky grading. Students cannot see this field.",
     )
-    grading_guidance = st.text_area(
-        "Grading guidance (private)", value=problem.get("grading_guidance", ""),
+    grading_guidance = logic_symbol_editor(
+        "Grading guidance (private)",
+        key=f"{key_prefix}_grading_guidance",
+        initial_content=problem.get("grading_guidance", ""),
+        height=120,
         help="Optional criteria and partial-credit guidance for Rocky grading.",
     )
     return {

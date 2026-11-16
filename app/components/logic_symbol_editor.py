@@ -3,19 +3,27 @@
 import streamlit as st
 
 
-LOGIC_SYMBOLS = (
-    ("¬", "Negation"),
-    ("∧", "Conjunction"),
-    ("∨", "Disjunction"),
-    ("→", "Implication"),
-    ("↔", "Biconditional"),
-    ("⊕", "Exclusive or"),
-    ("∀", "For all"),
-    ("∃", "There exists"),
-    ("⊢", "Proves"),
-    ("⊨", "Entails"),
-    ("⊤", "True"),
-    ("⊥", "False"),
+LOGIC_SYMBOL_CATEGORIES = (
+    ("Propositional Logic", (
+        ("~", "NOT"),
+        ("&", "AND"),
+        ("→", "IF/THEN"),
+        ("↔", "BICONDITIONAL"),
+        ("∨", "OR"),
+    )),
+    ("Predicate Logic", (
+        ("∀", "Universal quantifier"),
+        ("∃", "Existential quantifier"),
+    )),
+    ("Modal Logic", (
+        ("◇", "Possibly (Diamond)"),
+        ("□", "Necessarily (Box)"),
+    )),
+    ("Other", (
+        ("⊢", "Therefore"),
+        ("Φ", "Greek Phi"),
+        ("Ψ", "Greek Psi"),
+    )),
 )
 
 
@@ -30,8 +38,9 @@ def logic_symbol_editor(
     initial_content: str = "",
     *,
     height: int = 160,
+    help: str | None = None,
 ) -> str:
-    """Render a text area and logic-symbol buttons inside a Streamlit form.
+    """Render a text area and a categorized symbol popover in a Streamlit form.
 
     A symbol button submits the current form values, stores the selected symbol,
     and reruns the page. On the next run, the symbol is appended before the text
@@ -45,22 +54,31 @@ def logic_symbol_editor(
         st.session_state[key] = append_logic_symbol(current_content, pending_symbol)
 
     if key in st.session_state:
-        value = st.text_area(label, key=key, height=height)
+        value = st.text_area(label, key=key, height=height, help=help)
     else:
-        value = st.text_area(label, value=initial_content, key=key, height=height)
-    st.caption("Logic symbols — select one to append it to the end of the text.")
+        value = st.text_area(
+            label, value=initial_content, key=key, height=height, help=help,
+        )
 
-    for row_start in range(0, len(LOGIC_SYMBOLS), 6):
-        row = LOGIC_SYMBOLS[row_start:row_start + 6]
-        columns = st.columns(6)
-        for offset, ((symbol, description), column) in enumerate(zip(row, columns)):
-            index = row_start + offset
-            if column.form_submit_button(
-                symbol,
-                key=f"{key}__logic_symbol_{index}",
-                help=description,
-            ):
-                st.session_state[pending_key] = symbol
-                st.rerun()
+    with st.popover(
+        "Logic symbols",
+        icon=":material/functions:",
+        key=f"{key}__logic_symbols",
+    ):
+        st.caption("Select a symbol to append it to the end of this field.")
+        tabs = st.tabs([category for category, _ in LOGIC_SYMBOL_CATEGORIES])
+        symbol_index = 0
+        for tab, (_, symbols) in zip(tabs, LOGIC_SYMBOL_CATEGORIES):
+            with tab:
+                columns = st.columns(len(symbols))
+                for column, (symbol, description) in zip(columns, symbols):
+                    if column.form_submit_button(
+                        symbol,
+                        key=f"{key}__logic_symbol_{symbol_index}",
+                        help=description,
+                    ):
+                        st.session_state[pending_key] = symbol
+                        st.rerun()
+                    symbol_index += 1
 
     return value

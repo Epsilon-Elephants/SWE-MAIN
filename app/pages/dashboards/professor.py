@@ -105,7 +105,9 @@ def render_create_assignment(professor_id):
         posted = st.date_input("Posted date", help="Students can see this assignment starting on this date (UTC).")
         due_date = st.date_input("Due date", help="Deadline: midnight UTC at the start of the selected date. Late submissions are accepted.")
         first_problem = problem_editor("First problem", key="create_assignment_first_problem")
-        first_fields = grading_fields(first_problem)
+        first_fields = grading_fields(
+            first_problem, key_prefix="create_assignment_first_problem",
+        )
         st.caption("Post homework to make it available on the posted date, or finish later to save a private draft.")
         submitted = st.form_submit_button("Post homework", type="primary")
         finish_later = st.form_submit_button("Finish later")
