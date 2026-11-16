@@ -209,6 +209,17 @@ practice guidance based on the adjusted scores. No reference answers, private
 rubrics, or override reasons are added to overview data. Viewing suggestions
 never calls Rocky again.
 
+The student **Practice** page shows the same topic data in full: topics below 70%
+under **Review first** (weakest first), the rest under **Keep practicing**, each with
+its suggestion and a link to the source assignment. Percentages are rounded down for
+display so a score just under the cutoff never appears as 70%. Its optional **Build my
+review plan** button asks the recommendation engine for a prioritized plan, sending
+only topic names and score summaries (averaged over all graded attempts), never
+answers. It allows up to 1000 output tokens, because Rocky's full plan uses about 800
+and is cut off at the engine's 400-token default. Repeat requests within two minutes
+are ignored, since a sent request cannot be cancelled. If Rocky does not return a
+usable plan, the page labels and shows the engine's score-based fallback.
+
 ## Tentative and confirmed course totals
 
 Rocky's successful grading produces a **Tentative Rocky score**. It remains an

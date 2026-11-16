@@ -150,7 +150,8 @@ def show_submission_history(assignment_id):
 def show_homework_assignment():
     user = student_user()
     return_page = st.session_state.get("homework_return_page", "app_pages/homework.py")
-    if st.button("Back to course" if return_page == "app_pages/course.py" else "Back to homework", icon=":material/arrow_back:"):
+    back_label = {"app_pages/course.py": "Back to course", "app_pages/practice.py": "Back to practice"}.get(return_page, "Back to homework")
+    if st.button(back_label, icon=":material/arrow_back:"):
         st.switch_page(return_page)
     assignment_id = st.session_state.get("homework_assignment_id")
     if not assignment_id:

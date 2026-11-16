@@ -35,7 +35,7 @@ legacy `pages/` directory, to avoid page-name collisions on refresh.
 | --- | --- |
 | [`app/app.py`](../app/app.py) | Entry point, initial user state, shared styling, and role-scoped navigation. |
 | [`.streamlit/config.toml`](../.streamlit/config.toml) | Academic theme, built-in fonts, and sidebar palette. |
-| [`app/app_pages/`](../app/app_pages/) | Overview, homework, professor creation/editing, classes, practice status, and account routes. |
+| [`app/app_pages/`](../app/app_pages/) | Overview, homework, professor creation/editing, classes, student practice, and account routes. |
 | [`app/app_pages/overview.py`](../app/app_pages/overview.py), [`welcome.py`](../app/pages/welcome.py) | Show login or dispatch to the student's/professor's dashboard. |
 | [`app/auth/`](../app/auth) | Registration, password verification, and login rate limiting. |
 | [`app/pages/dashboards/`](../app/pages/dashboards) | Role-specific dashboard views, professor class management, and student Rocky dialog. |
@@ -58,7 +58,7 @@ Registration creates a `student` account. Login returns a session user containin
 
 `app.py` registers the overview for everyone and shows a role-scoped sidebar.
 Professors have separate classes, creation, and editing pages; students have
-separate homework-list, assignment-taking, and practice-status pages. Both roles
+separate homework-list, assignment-taking, and practice pages. Both roles
 have an account page. Contextual editing/taking routes are hidden from the menu
 but registered for `st.switch_page`. All route entry scripts live in
 `app/app_pages/`, separate from the helpers in `app/pages/`. A file in `app/pages/` does not
@@ -167,9 +167,11 @@ topics when the response is unusable. Empty histories return insufficient data
 without calling Rocky. Convenience calls own their engine/client, and reused
 engines serialize the complete payload transaction. The adapters also read actual problem scores from graded homework, preserving
 partial credit and snapshot topics. Homework grading is wired to submit/retry and
-the student/professor views. The student overview shows topic practice suggestions
-from its latest graded attempts; the broader recommendation engine remains a
-separate backend. Callers must enforce the access rules below before requesting database reports.
+the student/professor views. The student overview and Practice page show topic practice
+suggestions from the latest graded attempts. The Practice page also calls the student
+recommendation engine on request ("Build my review plan"), for the signed-in student only,
+with a higher output-token limit and a short per-session cooldown because Rocky is shared.
+The professor/class reports remain a separate backend. Callers must enforce the access rules below before requesting database reports.
 
 ## Access and scheduling rules
 
