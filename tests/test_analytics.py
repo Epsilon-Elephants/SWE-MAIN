@@ -21,7 +21,7 @@ def attempt(student, assignment, course, earned, possible=10, *, topic="Logic", 
         "_id": ObjectId(), "user_id": student, "assignment_id": assignment, "class_id": course,
         "submitted_at": NOW + timedelta(days=days), "grading_status": status,
         "assignment_snapshot": {"problems": [{"problem_id": "q", "topic": topic,
-                                              "reference_answer": "PRIVATE KEY"}]},
+                                              "points": possible, "reference_answer": "PRIVATE KEY"}]},
         "grading_result": {"total_points": earned, "max_points": possible,
                            "problems": [{"problem_id": "q", "points_awarded": earned, "max_points": possible}]},
     }
@@ -54,6 +54,19 @@ def test_recovered_topic_disappears_and_seventy_percent_is_not_struggling():
     assert result["average"] == 70
     assert result["struggling_topics"] == []
     assert result["has_topics"]
+
+
+def test_confirmed_professor_grade_takes_precedence_over_a_newer_tentative_attempt():
+    confirmed = attempt("alice", "a", "c", 1)
+    confirmed["professor_grade"] = {
+        "total_points": 8, "max_points": 10, "graded_at": NOW + timedelta(days=2),
+        "reason": "PRIVATE OVERRIDE REASON",
+        "problems": [{"problem_id": "q", "points_awarded": 8, "max_points": 10}],
+    }
+    result = summarize_scores([confirmed, attempt("alice", "a", "c", 0, days=3)])
+    assert result["average"] == 80
+    assert result["struggling_topics"] == []
+    assert "PRIVATE" not in repr(result)
 
 
 def test_topics_merge_case_and_whitespace_but_students_are_counted_once():
@@ -161,7 +174,7 @@ professorDash().load_dash()
     ]), patch("pages.dashboards.professor._load_assignment_context", return_value=(
         {course: "Logic class"}, {assignment: {"students": 1, "attempts": 2, "analytics": summary}},
     )), patch.object(db, "list_classes_page", return_value=([{"_id": course, "name": "Logic class"}], False)), patch(
-        "pages.dashboards.professor_classes.load_professor_analytics", return_value={"classes": {course: classroom}},
+        "components.analytics.load_professor_analytics", return_value={"classes": {course: classroom}},
     ):
         app.run()
     assert not app.exception

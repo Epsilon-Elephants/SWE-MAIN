@@ -35,7 +35,7 @@ def test_empty_classes_display_message():
         app = classes_app().run()
     assert not app.exception
     assert app.info[0].value == "No active classes found."
-    listing.assert_called_once_with("", 0, 10, instructor_id="professor-id", active_only=True)
+    listing.assert_called_once_with("", 0, 5, instructor_id="professor-id", active_only=True)
 
 
 @pytest.mark.parametrize("error", [ValueError("bad id"), RuntimeError("unconfigured"), PyMongoError("offline")])
@@ -47,23 +47,26 @@ def test_class_query_failure_is_displayed(error):
 
 
 def test_search_resets_pagination_and_previous_returns_to_first_page():
-    classroom = {"_id": ObjectId(), "name": "Logic"}
-    with patch.object(db, "list_classes_page", return_value=([classroom], True)) as listing:
+    classrooms = [{"_id": ObjectId(), "name": f"Logic {index}"} for index in range(15)]
+    def page(search, number, size, **kwargs):
+        return classrooms[number * size:(number + 1) * size], (number + 1) * size < len(classrooms)
+    with patch.object(db, "list_classes_page", side_effect=page) as listing:
         app = classes_app().run()
         assert not app.exception
+        assert len([button for button in app.button if button.label == "Open roster"]) == 5
+        app.button(key="professor_classes_see_more").click().run()
         assert app.button(key="professor_classes_previous").disabled
         app.button(key="professor_classes_next").click().run()
         assert not app.exception
-        listing.assert_called_with("", 1, 10, instructor_id="professor-id", active_only=True)
+        listing.assert_called_with("", 2, 5, instructor_id="professor-id", active_only=True)
         app.button(key="professor_classes_previous").click().run()
         assert not app.exception
-        assert app.session_state.professor_class_page == 0
-        app.button(key="professor_classes_next").click().run()
-        assert not app.exception
+        assert app.session_state.professor_class_page == 1
+        app.button(key="professor_classes_close_more").click().run()
         app.text_input(key="professor_class_search").set_value("  Logic  ").run()
         assert not app.exception
-        listing.assert_called_with("Logic", 0, 10, instructor_id="professor-id", active_only=True)
-        assert app.button(key="professor_classes_previous").disabled
+        listing.assert_called_with("Logic", 0, 5, instructor_id="professor-id", active_only=True)
+        assert "professor_classes_more" not in app.session_state
 
 
 def test_enrollment_dialog_rechecks_authorization_before_loading_students():
@@ -94,7 +97,7 @@ def test_roster_shows_grades_saves_changes_and_removes_with_confirmation():
         assert [button.label for button in app.button] == ["Open roster"]
         app.button(key=f"professor_class_{class_id}").click().run()
         assert not app.exception
-        listing.assert_called_with(str(class_id), enrolled=True, search="", page=0, page_size=10)
+        listing.assert_called_with(str(class_id), enrolled=True, search="", page=0, page_size=5)
         assert any("80.0%" in caption.value for caption in app.caption)
         assert app.button(key=f"professor_remove_{row_key}").disabled
         app.number_input(key=f"earned_{row_key}").set_value(9.0)
@@ -125,3 +128,20 @@ def test_roster_save_error_preserves_inputs_and_shows_error():
         assert not app.exception
         assert app.error[0].value == "Access denied"
         assert app.number_input(key=f"earned_{class_id}_{student_id}").value == 3.0
+
+
+def test_overflow_class_opens_roster_without_nested_dialogs():
+    classrooms = [{"_id": ObjectId(), "name": f"Logic {index}"} for index in range(6)]
+    def page(search, number, size, **kwargs):
+        return classrooms[number * size:(number + 1) * size], number == 0
+    with patch.object(db, "list_classes_page", side_effect=page), patch.object(
+        db, "authorize_class_enrollment", return_value=classrooms[-1],
+    ) as authorize, patch.object(db, "list_students_for_class", return_value=([], False)) as roster:
+        app = classes_app().run()
+        app.button(key="professor_classes_see_more").click().run()
+        assert not app.exception
+        app.button(key=f"professor_class_{classrooms[-1]['_id']}").click().run()
+        assert not app.exception
+        authorize.assert_called_with(str(classrooms[-1]["_id"]), "professor-id")
+        roster.assert_called_with(str(classrooms[-1]["_id"]), enrolled=True, search="", page=0, page_size=5)
+        assert "professor_classes_more" not in app.session_state

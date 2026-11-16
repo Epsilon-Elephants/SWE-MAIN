@@ -3,6 +3,7 @@
 from collections import defaultdict
 from datetime import datetime, timezone
 from math import isfinite
+from homework.grades import effective_grade, confirmed_grade
 
 STRUGGLE_THRESHOLD = 70
 
@@ -23,10 +24,14 @@ def _attempt_order(row):
 
 
 def latest_graded_attempts(rows):
-    """Pending/failed retries keep the last graded result until they are graded."""
+    """Prefer professor decisions, then latest Rocky grades, as course totals do."""
     latest = {}
-    for row in sorted(rows, key=_attempt_order, reverse=True):
-        result = row.get("grading_result") or {}
+    def order(row):
+        confirmed = confirmed_grade(row)
+        decision = _attempt_order({"submitted_at": confirmed.get("graded_at", row.get("submitted_at"))}) if confirmed else _attempt_order(row)
+        return bool(confirmed), decision, _attempt_order(row)
+    for row in sorted(rows, key=order, reverse=True):
+        result = effective_grade(row) or {}
         if (row.get("grading_status") == "graded" and row.get("user_id") is not None
                 and row.get("assignment_id") is not None
                 and valid_score(result.get("total_points"), result.get("max_points"))):
@@ -44,7 +49,7 @@ def summarize_scores(rows):
     students = defaultdict(lambda: [0, 0])
     topics = {}
     for row in rows:
-        result = row["grading_result"]
+        result = effective_grade(row)
         total = students[row["user_id"]]
         total[0] += result["total_points"]
         total[1] += result["max_points"]

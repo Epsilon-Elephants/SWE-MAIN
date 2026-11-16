@@ -3,6 +3,18 @@
 Streamlit application for professor-managed classes, short-answer homework, and
 the Rocky AI assistant. Students can submit homework and review their attempts.
 Homework answers are saved first, then Rocky grades each problem against the professor’s reference answer and optional rubric. Students and professors can review scores and feedback; failed grading can be retried.
+Submissions process in the background and include topic-specific practice suggestions.
+The student overview links directly to coursework and shows what to practice next.
+Long lists show five entries, with more in paginated popups. Light and dark themes
+are available in the top-right app settings; logout stays in the sidebar.
+The dashboard now uses course cards and a short To do panel. Course workspaces
+separate Assignments, Grades, and professor People management. Assignment editing
+shows one question at a time. New/edited questions require a prompt, topic,
+reference answer, and positive points; blank partial-credit criteria let Rocky
+choose reasonable partial credit.
+Rocky scores are tentative until a professor confirms or overrides them. Student
+course pages show a compact bar with confirmed points, unconfirmed Rocky points,
+and a combined estimate; each assignment contributes only once.
 
 Professor assignment and class cards show average grades and topics students need
 to practice. Each student class card includes a private focus-topic panel. Status

@@ -8,13 +8,15 @@ saved submission and shown to students and professors.
 
 1. The server checks the student's role, enrollment, assignment visibility, and exact answer IDs.
 2. Answers and a canonical assignment snapshot are saved before contacting Rocky.
-3. The grader claims that saved attempt with a ten-minute lease, builds its private grading input, and sends one request to Rocky.
+3. The page returns immediately with Processing. A background worker claims the saved attempt with a ten-minute lease and sends one request to Rocky.
 4. The server validates exactly one result per problem, finite points between zero and the saved maximum, and nonblank feedback. It calculates totals and a 0–100 percentage itself.
 5. The same submission becomes `graded`, with per-problem points, feedback, model, and grading time. There is no second completion record to duplicate during retries.
 
-Students see AI scores and feedback in their submitted-attempt history. Professors
+Students see tentative Rocky scores or confirmed scores and feedback in their submitted-attempt history. Professors
 see actual homework attempts in the assignment editor, including answers, scores,
-feedback, and a grading/retry button. Normal page reruns do not call the model.
+feedback, and a Review and grade popup. Normal page reruns do not call the model.
+The popup shows student and professor answers, preserves Rocky's original grade,
+and supports a separately saved professor override or restoration of the AI grade.
 
 ## Canonical problem document
 
@@ -38,8 +40,8 @@ feedback, and a grading/retry button. Normal page reruns do not call the model.
 | `type` | Only `short_answer` is supported. | Not rendered |
 | `content` | Required, nonblank prompt. Supports Markdown, Unicode symbols, and LaTeX. | Yes |
 | `points` | Finite positive number, excluding booleans; defaults to `1.0`. | Yes |
-| `topic` | Text used to label the subject; defaults to `""`. | Yes |
-| `reference_answer` | Private model answer; defaults to `""`. | No |
+| `topic` | Required, nonblank subject label for new or edited questions. Legacy reads default to `""`. | Yes |
+| `reference_answer` | Required, nonblank private model answer for new or edited questions. Legacy reads default to `""`. | No |
 | `grading_guidance` | Private rubric and partial-credit instructions; defaults to `""`. | No |
 
 The [JSON Schema](homework-problem.schema.json) describes the complete canonical
@@ -48,7 +50,7 @@ defaults, strips surrounding whitespace from text fields other than the ID, and
 returns only canonical fields. It does not execute a JSON Schema validator.
 `normalize_problems` additionally rejects empty lists and duplicate IDs.
 
-Older plain strings and `{problem_id, content}` documents still work. Existing
+Older plain strings and `{problem_id, content}` documents can still be read and graded. Existing
 IDs are preserved, including when a professor edits a question. A text-only
 `update_problem` preserves existing metadata. A structured edit is normalized as
 the replacement canonical document, so omitted optional fields return to defaults;
@@ -56,9 +58,20 @@ include metadata you want to keep. The existing problem ID is always preserved.
 
 For authoring, keep the student task in `content`, an example of a correct answer
 in `reference_answer`, and scoring criteria in `grading_guidance`. Use consistent
-topic names if results will later be grouped by topic. Empty reference answers
-are allowed for authoring, but block grading until the professor supplies them.
-Rubrics are optional.
+topic names for recommendations. `authored_problem` and `authored_problems`
+enforce a nonblank question, topic, reference answer, and positive points for
+creation, editing, and publication. Empty assignments can remain drafts; any
+question saved into them must be complete. The JSON Schema's `$defs.authored`
+describes these stricter rules while the root schema retains historical
+snapshot compatibility. No snapshot backfill is needed.
+
+Partial-credit criteria (`grading_guidance`) are optional and collapsed by
+default in the editor. When blank or whitespace-only, Rocky uses its own
+judgment to award reasonable partial credit for correct concepts, reasoning,
+and intermediate steps, considering the significance of mistakes. It does not
+require a rubric or default to all-or-nothing scoring. Supplied criteria take
+precedence, and the saved point maximum always bounds the score. Missing
+references in historical submissions retain the existing blocked/retry behavior.
 
 LaTeX stays text in storage and in the AI input. JSON requires backslashes to be
 escaped: a prompt containing `$P \land Q$` is written as `"$P \\land Q$"` in JSON.
@@ -159,7 +172,8 @@ questions, because the server matches results by ID:
   "schema_version": 1,
   "results": [
     {"problem_id": "d9dd92ef-0b68-4ca8-a409-cf55ce92c73c", "points_awarded": 2.0,
-     "feedback": "Explain how both operands affect the truth value."}
+     "feedback": "Explain how both operands affect the truth value.",
+     "study_recommendation": "Build a truth table for a new conjunction and explain which rows make it true."}
   ]
 }
 ```
@@ -176,11 +190,76 @@ The saved `grading_result` includes `schema_version`, `problems` (each with
 widgets render selected score/feedback fields, never the private context,
 snapshot references, raw response, prompt, or transport errors.
 
+Each graded problem also stores `study_recommendation`, a brief, actionable
+practice suggestion tied to its saved `topic`. Rocky generates this alongside
+the score and feedback in the same request. Correct answers receive extension
+practice; lower scores receive focused review. The field is optional in model
+output for backward compatibility. Blank, non-text, oversized, or missing
+recommendations fall back to bounded, topic-based practice guidance without
+discarding valid scores or making another model request. Recommendation text
+must be at most 1000 characters; prompts prohibit copying private reference
+answers or rubrics into it.
+
+Students see suggestions below each problem's feedback and under **What to
+practice next** on the overview. Overview recommendations use the latest graded
+attempt for each assignment, group by the professor's actual topic labels, and
+prioritize lower scores. Unlabeled topics remain question-level guidance rather
+than inventing a topic label. Professor overrides take precedence and get
+practice guidance based on the adjusted scores. No reference answers, private
+rubrics, or override reasons are added to overview data. Viewing suggestions
+never calls Rocky again.
+
+The student **Practice** page shows the same topic data in full: topics below 70%
+under **Review first** (weakest first), the rest under **Keep practicing**, each with
+its suggestion and a link to the source assignment. Percentages are rounded down for
+display so a score just under the cutoff never appears as 70%. Its optional **Build my
+review plan** button asks the recommendation engine for a prioritized plan, sending
+only topic names and score summaries (averaged over all graded attempts), never
+answers. It allows up to 1000 output tokens, because Rocky's full plan uses about 800
+and is cut off at the engine's 400-token default. Repeat requests within two minutes
+are ignored, since a sent request cannot be cancelled. If Rocky does not return a
+usable plan, the page labels and shows the engine's score-based fallback.
+
+## Tentative and confirmed course totals
+
+Rocky's successful grading produces a **Tentative Rocky score**. It remains an
+estimate until a professor reviews the attempt and chooses **Confirm Rocky's
+grade**, or saves an override. Both actions recheck current professor ownership,
+validate every score against the snapshot, calculate totals on the server, and
+save a separate `professor_grade` with reviewer/time metadata. `source: "rocky"`
+records acceptance of the AI result; `source: "professor"` records an override.
+Existing saved professor overrides are also confirmed. Rocky's original result
+is preserved. Choosing **Use Rocky's original grade** after an override confirms
+that original result without making another model request.
+
+Student course pages show a compact score bar above course navigation, refreshed
+every five seconds. Green shows confirmed earned points, amber shows unconfirmed
+Rocky earned points, and gray shows points not earned on the included graded work.
+Text below shows confirmed earned/possible points, tentative earned/possible
+points, and the combined estimate. A course with no grades shows an empty bar
+without inventing a percentage. Each refresh rechecks the student's role and
+enrollment and reads only that student's course submissions.
+
+Totals count each assignment once. The most recent professor decision for that
+assignment supplies its confirmed grade; other attempts and the corresponding
+Rocky score are excluded from the tentative bucket. If no confirmed attempt
+exists, the newest graded Rocky attempt supplies a tentative score. A newer
+pending resubmission does not turn a known score into zero, and a new tentative
+attempt cannot add points on top of an already confirmed assignment. Pending,
+failed, and unsubmitted work adds no score or denominator.
+
+For example, confirmed **8/10** plus unconfirmed Rocky **3/5** produces an actual
+confirmed percentage of **80%** and a combined estimate of **11/15 (73.33%)**.
+Confirming the second score moves its 3/5 into the confirmed total; it is never
+counted in both buckets. Separately entered enrollment/class grades remain in a
+collapsed **Professor-recorded course grade** section and are not mixed into
+these assignment totals because they lack assignment-level attribution.
+
 ## Failures, missing references, and retries
 
 | State | Meaning |
 | --- | --- |
-| `ungraded` | Saved, with no grading attempt yet (including legacy submissions). |
+| `ungraded` | Saved and queued for background grading (including legacy submissions). Shown as Processing. |
 | `grading` | A worker holds a ten-minute lease. An expired lease can be reclaimed. |
 | `graded` | A complete, validated result is persisted. Clicking again does not grade twice. |
 | `failed` | Service failure or invalid response/input; answers remain saved, with no fabricated zero. |
@@ -197,8 +276,13 @@ only when that problem's ID, question text, and points still match. It never
 replaces the saved question or maximum. This allows professors to supply an answer
 key after submission while keeping the original attempt intact.
 
-Grading is synchronous during submit/retry; there is no separate task worker.
-A process interruption or failed final database write leaves a reclaimable lease.
+The app starts one shared background worker per authenticated server process.
+It polls due work every five seconds, handles one attempt at a time, retries
+temporary outages with backoff from 30 seconds up to ten minutes, and checks
+missing references again after a minute. Submit/retry handlers only save or
+queue work. Student history refreshes independently of the answer form.
+A process interruption or failed final database write leaves a reclaimable lease,
+which the worker discovers after restart. The queue lives in MongoDB.
 Repeated homework submissions intentionally remain separate attempts. Existing
 graded attempts are not automatically regraded after a professor edits an answer.
 
@@ -223,9 +307,12 @@ alongside legacy `completed_assignments`. They use the saved problem topics and
 partial-credit ratios, including when the live assignment has since been deleted.
 Failed or ungraded attempts are excluded. This connects the grade data to the
 recommendation backend; recommendation widgets remain separate future UI work.
-Manual enrollment/class grades are still separate; AI grading does not overwrite
-them. Professor score overrides and grade history beyond separate attempts remain
-future work.
+Manual enrollment/class grades are still separate; homework grading does not
+overwrite them. Professor overrides live in `professor_grade` with reviewer,
+timestamp, and reason metadata, while `grading_result` retains Rocky's result.
+Revision checks prevent older review forms replacing newer edits. Student views
+and recommendation evidence use the active professor grade. A full history of
+past professor edits remains future work.
 
 Tests mock Rocky and MongoDB. A separate synthetic smoke check verified a correct
 and incorrect answer against `qwen3.8-27b`; no real student data or database writes

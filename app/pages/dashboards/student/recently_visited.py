@@ -32,17 +32,18 @@ def get_recent() -> list[dict]:
         st.session_state[key()] = items
     return st.session_state[key()]
 
-def record_visit(kind: str, item_id, title: str) -> None:
+def record_visit(kind: str, item_id, title: str, class_name: str = "", due: str = "") -> None:
     if not user_id():
         return
     current = get_recent()
     item_id = str(item_id)
     if key() not in st.session_state and load() is None:
         return
-    if current and current[0]["kind"] == kind and current[0]["item_id"] == item_id:
+    entry = {"kind": kind, "item_id": item_id, "title": title, "class_name": class_name, "due": due}
+    if current and current[0] == entry:
         return
     items = [i for i in current if not (i["kind"] == kind and i["item_id"] == item_id)]
-    items.insert(0, {"kind": kind, "item_id": item_id, "title": title})
+    items.insert(0,entry)
     items = items[:MAX_RECENT]
     st.session_state[key()] = items
     try:

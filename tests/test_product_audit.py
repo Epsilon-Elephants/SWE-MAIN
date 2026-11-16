@@ -153,12 +153,12 @@ def test_professor_creation_and_editor_are_real_pages():
         next(w for w in app.text_input if w.label == "Assignment title").set_value("Logic homework")
         next(b for b in app.button if b.label == "Finish later").click().run()
         assert not app.exception
-        assert app.title[0].value == "Assignment workspace"
+        assert app.title[0].value == "Logic homework"
         assert [tab.label for tab in app.tabs] == ["Details", "Problems", "Submissions"]
         app.switch_page("app_pages/edit_assignment.py").run()
         app.button(key="back_to_assignments").click().run()
         assert not app.exception
-        assert app.title[0].value == "Professor Dashboard"
+        assert app.title[0].value == "Assignments"
 
 
 def test_login_page_handles_unconfigured_database():
@@ -177,10 +177,9 @@ def test_classes_route_passes_authenticated_professor_scope():
     app.session_state.user = {"id": professor_id, "permissions": "professor", "email": "prof@example.com"}
     with patch("pages.dashboards.professor.list_assignments_for_professor", return_value=[]), patch(
         "pages.dashboards.professor._load_assignment_context", return_value=({}, {}),
-    ), patch("pages.dashboards.professor_classes.render_professor_classes") as classes:
+    ), patch("courses.views.show_courses") as courses:
         app.run()
-        classes.reset_mock()
+        courses.reset_mock()
         app.switch_page("app_pages/classes.py").run()
     assert not app.exception
-    assert app.title[0].value == "Your classes"
-    classes.assert_called_once_with(professor_id)
+    courses.assert_called_once_with(dict(app.session_state.user))

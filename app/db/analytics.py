@@ -21,7 +21,9 @@ def load_professor_analytics(professor_id, class_ids=None):
     # never leave the database for this read.
     rows = list(db.aggregate("homework_submissions", [
         {"$match": {"class_id": {"$in": ids}, "grading_status": "graded"}},
-        {"$sort": {"submitted_at": -1, "_id": -1}},
+        {"$set": {"_analytics_confirmed": {"$cond": [{"$eq": [{"$type": "$professor_grade"}, "object"]}, 1, 0]},
+                  "_analytics_graded_at": {"$ifNull": ["$professor_grade.graded_at", "$submitted_at"]}}},
+        {"$sort": {"_analytics_confirmed": -1, "_analytics_graded_at": -1, "submitted_at": -1, "_id": -1}},
         {"$group": {"_id": {"student": "$user_id", "assignment": "$assignment_id"},
                      "attempt": {"$first": "$$ROOT"}}},
         {"$replaceRoot": {"newRoot": "$attempt"}},
@@ -31,6 +33,11 @@ def load_professor_analytics(professor_id, class_ids=None):
                       "grading_result.problems.problem_id": 1,
                       "grading_result.problems.points_awarded": 1,
                       "grading_result.problems.max_points": 1,
+                      "professor_grade.graded_at": 1,
+                      "professor_grade.total_points": 1, "professor_grade.max_points": 1,
+                      "professor_grade.problems.problem_id": 1,
+                      "professor_grade.problems.points_awarded": 1,
+                      "professor_grade.problems.max_points": 1,
                       "assignment_snapshot.problems.problem_id": 1,
                       "assignment_snapshot.problems.topic": 1}},
     ]))

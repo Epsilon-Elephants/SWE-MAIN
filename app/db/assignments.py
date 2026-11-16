@@ -3,7 +3,7 @@
 from datetime import date, datetime, time, timezone
 
 from db.DataBase import db
-from homework.schema import normalize_problem, normalize_problems
+from homework.schema import authored_problem, authored_problems
 
 
 _UNSET = object()
@@ -34,6 +34,7 @@ def _schedule_update(query, posted, due_date, status):
     existing = db.read_one("assignments", query) or {}
     if status != "draft":
         _require_problems(existing.get("problems"))
+        authored_problems(existing["problems"])
     return _schedule(
         existing.get("posted") if posted is _UNSET else posted,
         existing.get("due_date") if due_date is _UNSET else due_date,
@@ -95,7 +96,7 @@ def create_assignment(
     if db.read_one("classes", {"_id": class_id, "instructor_id": instructor_id}) is None:
         raise ValueError("Select a class that you teach.")
 
-    problem_documents = [] if status == "draft" and not problems else normalize_problems(problems)
+    problem_documents = [] if status == "draft" and not problems else authored_problems(problems)
 
     assignment = {
         "title": title,
@@ -206,13 +207,12 @@ def add_problem(assignment_id, professor_id: str, content: str | dict):
     if not professor_id:
         raise ValueError("Professor ID is required.")
 
-    problem = normalize_problem(content)
-
     query = {"_id": assignment_id, "professor_id": professor_id}
     assignment = db.read_one("assignments", query)
     if assignment is None:
         return None
 
+    problem = authored_problem(content)
     problems = list(assignment.get("problems", []))
     problems.append(problem)
 
@@ -249,7 +249,7 @@ def update_problem(
     for problem in problems:
         if problem.get("problem_id") == problem_id:
             source = {**problem, "content": content} if isinstance(content, str) else content
-            problem.update(normalize_problem(source, problem_id=problem_id))
+            problem.update(authored_problem(source, problem_id=problem_id))
             result = db.update_one("assignments", query, {"problems": problems})
             return result.matched_count > 0
 
