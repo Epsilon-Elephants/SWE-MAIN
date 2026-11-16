@@ -86,13 +86,17 @@ def _render_plan_section(user_id, has_scores):
             # Record the request before sending it, so a click while it loads is also ignored.
             st.session_state[PLAN_REQUESTED_KEY] = (user_id, monotonic())
             try:
+                st.toast("Your review plan was requested from Rocky.", icon=":material/send:")
                 with st.spinner("Rocky is building your plan..."):
                     st.session_state[PLAN_KEY] = {"user_id": user_id, **_request_plan(user_id)}
+                message = "Rocky's review plan is ready." if st.session_state[PLAN_KEY]["from_rocky"] else "Your score-based review plan is ready."
+                st.toast(message, icon=":material/check_circle:")
             except Exception:  # Show students a friendly message for any failure, and log the details.
                 logging.exception("Could not build review plan")
                 st.session_state.pop(PLAN_KEY, None)
                 st.session_state.pop(PLAN_REQUESTED_KEY, None)  # Allow an immediate retry after an error.
                 st.error("Could not build a review plan right now. Please try again later.")
+                st.toast("Could not build your review plan. Please try again.", icon=":material/error:")
     plan = st.session_state.get(PLAN_KEY)
     if not plan or plan.get("user_id") != user_id:
         return

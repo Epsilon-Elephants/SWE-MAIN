@@ -7,6 +7,7 @@ import streamlit as st
 from homework.grading import queue_grading
 from homework.grades import effective_grade, confirmed_grade
 from homework.study import practice_suggestion
+from components.notifications import queue_notice, track_grading
 
 
 def grading_label(submission):
@@ -53,4 +54,6 @@ def grading_action(submission, actor_id):
         st.warning("Your work is saved. Rocky could not finish grading; you can retry this attempt.")
     if st.button("Retry grading", key=f"grade_submission_{submission['_id']}"):
         queue_grading(submission["_id"], actor_id)
+        track_grading(submission["_id"])
+        queue_notice("Your saved answers were queued for Rocky grading.", icon=":material/send:")
         st.rerun()

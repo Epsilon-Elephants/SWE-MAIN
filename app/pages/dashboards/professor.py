@@ -12,6 +12,10 @@ from pages.dashboards.dashboard import Dashboard
 from components.compact_list import compact_list, close_compact_list
 from components.course_cards import course_cards, assignment_row
 from homework.schema import authored_problem
+from components.analytics import professor_insights, professor_courses
+from components.notifications import show_notices, show_success
+from db.analytics import load_professor_analytics
+from homework.analytics import summarize_scores
 
 logger = logging.getLogger(__name__)
 
@@ -81,6 +85,13 @@ def _load_assignment_context(professor_id, assignments):
         logger.exception("Failed to load professor dashboard details")
         st.caption("Class names and submission counts are unavailable right now.")
         return {}, {}
+    try:
+        analytics = load_professor_analytics(professor_id, class_names)["assignments"]
+        for assignment in assignments:
+            summary = completions.setdefault(assignment["_id"], {"students": 0, "attempts": 0})
+            summary["analytics"] = analytics.get(assignment["_id"], summarize_scores([]))
+    except (ValueError, RuntimeError, PyMongoError):
+        logger.exception("Failed to load assignment analytics")
     return class_names, completions
 
 
@@ -163,7 +174,8 @@ def _render_assignment_card(assignment, state, class_name=None, summary=None, *,
     if summary:
         details.append(f"{summary['students']} submitted")
     assignment_row(assignment.get("title", "Untitled"), " · ".join(details), STATE_LABELS[state],
-                   key=f"open_{assignment['_id']}", open_assignment=lambda: _open_assignment(assignment["_id"], return_page=return_page))
+                   key=f"open_{assignment['_id']}", open_assignment=lambda: _open_assignment(assignment["_id"], return_page=return_page),
+                   insights=(summary or {}).get("analytics"), show_insights=True)
 
 
 def render_assignment_groups(assignments, class_names, completions, *, key="professor_assignments", return_page="app_pages/assignments.py"):
@@ -184,6 +196,7 @@ def render_assignment_groups(assignments, class_names, completions, *, key="prof
 
 class professorDash(Dashboard):
     def load_dash(self):
+        show_notices()
         user = st.session_state.get("user") or {}
         st.title("Dashboard")
         st.caption(f"Welcome back, {user.get('first_name') or 'Professor'}")
@@ -198,7 +211,7 @@ class professorDash(Dashboard):
             st.error("Could not load your courses. Try again.")
             return
         if message := st.session_state.pop("professor_assignment_success", None):
-            st.success(message)
+            show_success(message)
         if st.button("Create assignment", type="primary", icon=":material/add:"):
             st.switch_page("app_pages/create_assignment.py")
         main, todo = st.columns([3, 1], gap="large")
@@ -207,7 +220,7 @@ class professorDash(Dashboard):
             courses = [{"_id": cid, "name": name} for cid, name in class_names.items()]
             if not courses:
                 st.caption("Your courses will appear here once they are set up.")
-            course_cards(courses, key="professor_courses")
+            course_cards(professor_courses(professor_id, courses), key="professor_courses")
         with todo:
             st.subheader("To do")
             upcoming = sorted((row for row in assignments if assignment_state(row) in {"open", "past_due", "scheduled"}), key=_due_sort_key)

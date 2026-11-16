@@ -18,6 +18,7 @@ from homework.results import grading_action, grading_label, show_problem_result
 
 from pages.dashboards.student.due_dates import due_sort_key, due_status, resolve_timezone
 from pages.dashboards.student.recently_visited import record_visit
+from components.notifications import queue_notice, show_notices, observe_grading, track_grading
 
 
 ERRORS = (ValueError, RuntimeError, PyMongoError)
@@ -125,6 +126,7 @@ def show_submission_history(assignment_id):
     try:
         get_homework_for_student(assignment_id, user["id"])
         history = list_submissions_for_student(user["id"], assignment_id)
+        observe_grading(history)
         if not history:
             return
         tz = user_tz()
@@ -148,6 +150,7 @@ def show_submission_history(assignment_id):
 
 
 def show_homework_assignment():
+    show_notices()
     user = student_user()
     return_page = st.session_state.get("homework_return_page", "app_pages/homework.py")
     back_label = {"app_pages/course.py": "Back to course", "app_pages/practice.py": "Back to practice"}.get(return_page, "Back to homework")
@@ -182,7 +185,9 @@ def show_homework_assignment():
                 )
             submitted = st.form_submit_button("Submit homework", type="primary", icon=":material/send:")
         if submitted:
-            submit_homework(assignment_id, user["id"], answers)
+            submission_id = submit_homework(assignment_id, user["id"], answers)
+            track_grading(submission_id)
+            queue_notice("Homework saved and queued for Rocky grading.", icon=":material/send:")
             st.rerun()
     except ERRORS as error:
         if isinstance(error, ValueError):

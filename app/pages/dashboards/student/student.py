@@ -17,6 +17,7 @@ from pages.dashboards.dashboard import Dashboard
 from pages.dashboards.student.due_dates import _as_utc, due_sort_key, due_status, resolve_timezone
 from pages.dashboards.student.recently_visited import get_recent
 from rocky.rocky import rocky
+from components.analytics import student_insights
 
 
 def open_homework(item_id, *, return_page="app_pages/homework.py"):
@@ -94,7 +95,7 @@ def rocky_dialog() -> None:
    )
 
     answer_slot = st.empty()
-    if st.button("->", key="student_rocky_ask", type="primary"):
+    if st.button("Send to Rocky", key="student_rocky_ask", type="primary", icon=":material/send:"):
         if not question.strip():
             st.warning("Ask a question first.")
         else:
@@ -103,24 +104,29 @@ def rocky_dialog() -> None:
                 with st.spinner("Rocky is thinking..."):
                     bot = get_rocky()
                     bot.make_payload(question.strip(), stream=True)
+                    st.toast("Your question was sent to Rocky.", icon=":material/send:")
                     with closing(bot.send_payload()) as response_stream:
                         with answer_slot.container():
                             st.session_state.student_rocky_answer = st.write_stream(response_stream)
+                    st.toast("Rocky's response is ready.", icon=":material/check_circle:")
             except requests.exceptions.Timeout:
                 answer_slot.empty()
                 st.session_state.pop("rocky_client", None)
                 logging.exception("Rocky request timed out")
                 st.error("Rocky timed out. Please try again shortly.")
+                st.toast("Rocky timed out. Please try again.", icon=":material/error:")
             except requests.exceptions.ConnectionError:
                 answer_slot.empty()
                 st.session_state.pop("rocky_client", None)
                 logging.exception("Could not connect to Rocky")
                 st.error("Unable to connect to Rocky. Please try again later.")
+                st.toast("Unable to connect to Rocky.", icon=":material/error:")
             except Exception:
                 answer_slot.empty()
                 st.session_state.pop("rocky_client", None)
                 logging.exception("Rocky request failed")
                 st.error("Rocky is unavailable right now. Please try again later.")
+                st.toast("Rocky is unavailable. Please try again later.", icon=":material/error:")
 
     answer = st.session_state.get("student_rocky_answer")
     if answer:
@@ -145,7 +151,8 @@ class studentDash(Dashboard):
                 if not overview["classes"]:
                     st.info("You are not enrolled in a class yet. Your professor can add you to a class.")
                 course_cards([
-                    {"_id": row["_id"], "name": row["Class"], "detail": _course_detail(row["_id"], overview["assignments"])}
+                    {"_id": row["_id"], "name": row["Class"], "detail": _course_detail(row["_id"], overview["assignments"]),
+                     "insights": row.get("insights")}
                     for row in overview["classes"] if row.get("_id")
                 ], key="student_courses")
             with work:

@@ -10,6 +10,9 @@ from db.assignments import list_assignments_for_professor, list_assignments_for_
 from db.homework_submissions import list_submissions_for_student
 from homework.results import grading_label
 from homework.grades import course_score_summary
+from homework.analytics import summarize_scores
+from components.analytics import professor_courses, student_insights
+from components.notifications import observe_grading
 
 
 def authorized_course(course_id, user):
@@ -44,6 +47,8 @@ def student_course_scores(course_id):
                 if row.get("class_id") == course["_id"] and row.get("user_id") == uid]
         from components.course_scores import show_score_bar
         show_score_bar(course_score_summary(rows))
+        student_insights(summarize_scores(rows))
+        observe_grading(rows)
     except (ValueError, RuntimeError, PyMongoError):
         st.caption("Course scores are temporarily unavailable. Try again shortly.")
 
@@ -62,6 +67,12 @@ def show_courses(user):
         courses = list(db.find("classes", query))
         search = st.text_input("Find a course", placeholder="Search by course name").strip().casefold()
         courses = sorted((row for row in courses if search in row["name"].casefold()), key=lambda row: row["name"].casefold())
+        if user["permissions"] == "professor":
+            courses = professor_courses(user["id"], courses)
+        else:
+            submissions = list_submissions_for_student(user["id"])
+            courses = [{**course, "insights": summarize_scores(row for row in submissions
+                       if row.get("user_id") == uid and row.get("class_id") == course["_id"])} for course in courses]
         if not courses:
             st.caption("No courses found.")
         course_cards(courses)
@@ -145,11 +156,12 @@ def show_course(user):
             st.write("Use Assignments to open coursework, or Grades to review submission results.")
             return
         if professor:
-            from pages.dashboards.professor import render_assignment_groups
+            from pages.dashboards.professor import render_assignment_groups, _load_assignment_context
             if st.button("Create assignment", icon=":material/add:", type="primary"):
                 st.session_state.create_course_id = str(course["_id"])
                 st.switch_page("app_pages/create_assignment.py")
-            render_assignment_groups(assignments, {}, {}, key=f"course_professor_assignments_{course_id}", return_page="app_pages/course.py")
+            class_names, completions = _load_assignment_context(user["id"], assignments)
+            render_assignment_groups(assignments, class_names, completions, key=f"course_professor_assignments_{course_id}", return_page="app_pages/course.py")
         else:
             from pages.dashboards.student.student import open_homework
             search = st.text_input("Find an assignment", key=f"course_assignment_search_{course_id}").strip().casefold()

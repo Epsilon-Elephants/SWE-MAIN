@@ -5,6 +5,9 @@ from pymongo.errors import PyMongoError
 
 from db.DataBase import db
 from components.compact_list import close_compact_list
+from components.analytics import professor_insights, professor_courses
+from components.notifications import show_success
+from db.analytics import load_professor_analytics
 
 logger = logging.getLogger(__name__)
 
@@ -81,7 +84,7 @@ def _manage_class(class_id, professor_id):
 
     st.subheader(classroom["name"])
     if message := st.session_state.pop("professor_enrollment_success", None):
-        st.success(message)
+        show_success(message)
     if st.button("Close", key="professor_close_roster"):
         _dismiss_enrollment()
         st.rerun()
@@ -144,6 +147,7 @@ def _class_card(classroom):
     with st.container(border=True):
         st.markdown(f"**{classroom['name']}**")
         st.caption("Active class")
+        professor_insights(classroom.get("insights"), course=True)
         if st.button("Open roster", key=f"professor_class_{class_id}"):
             close_compact_list()
             st.session_state.pop("professor_classes_more", None)
@@ -172,7 +176,7 @@ def _more_classes(professor_id, search):
         st.error("Could not load your classes. Try again.")
         return
     st.caption(f"Page {page + 1} · Up to five classes per page")
-    for classroom in classes:
+    for classroom in professor_courses(professor_id, classes):
         _class_card(classroom)
     with st.container(horizontal=True):
         st.button("Previous", disabled=page <= 1, key="professor_classes_previous", on_click=_class_page, args=(-1,))
@@ -203,8 +207,13 @@ def render_professor_classes(professor_id):
         return
     if not classes:
         st.info("No active classes found.")
+    try:
+        analytics = load_professor_analytics(professor_id, [row["_id"] for row in classes])["classes"] if classes else {}
+    except (ValueError, RuntimeError, PyMongoError):
+        logger.exception("Failed to load class analytics")
+        analytics = {}
     for classroom in classes:
-        _class_card(classroom)
+        _class_card({**classroom, "insights": analytics.get(classroom["_id"])})
     if has_next and st.button("See more classes", key="professor_classes_see_more"):
         st.session_state.professor_class_page = 1
         st.session_state.professor_classes_more = True

@@ -18,6 +18,7 @@ from homework.results import grading_label
 from homework.review_views import REVIEW_SELECTION, review_submission_dialog
 from components.compact_list import compact_list, close_compact_list
 from homework.schema import authored_problem, authored_problems
+from components.notifications import show_notices, show_success, observe_grading
 
 logger = logging.getLogger(__name__)
 
@@ -34,13 +35,15 @@ def _format_timestamp(value):
 
 def _show_error(error):
     logger.exception("Assignment operation failed")
-    st.error(str(error) if isinstance(error, ValueError) else "Could not save or load the assignment. Try again.")
+    message = str(error) if isinstance(error, ValueError) else "Could not save or load the assignment. Try again."
+    st.error(message)
+    st.toast(message, icon=":material/error:")
 
 
 def _render_submissions(assignment_id, professor_id):
     st.markdown("**Submissions**")
     if message := st.session_state.pop("professor_grading_notice", None):
-        st.success(message)
+        show_success(message)
     try:
         rows = list_submissions_for_assignment(assignment_id, professor_id)
     except (ValueError, RuntimeError, PyMongoError) as error:
@@ -49,6 +52,7 @@ def _render_submissions(assignment_id, professor_id):
     if not rows:
         st.info("No submissions yet.")
         return
+    observe_grading(rows)
     st.caption(f"{len(rows)} submitted attempt{'s' if len(rows) != 1 else ''}.")
     def render_attempt(attempt):
         with st.container(border=True):
@@ -67,6 +71,7 @@ def _render_submissions(assignment_id, professor_id):
 
 
 def show_assignment_editor(assignment_id, professor_id: str):
+    show_notices()
     return_page = st.session_state.get("professor_assignment_return_page", "app_pages/assignments.py")
     if st.button("Back to course" if return_page == "app_pages/course.py" else "Back to assignments", key="back_to_assignments"):
         st.session_state.pop("selected_assignment_id", None)
@@ -87,7 +92,7 @@ def show_assignment_editor(assignment_id, professor_id: str):
     st.title(assignment.get("title", "Assignment"))
     st.caption(f"Status: {current_status.capitalize()}")
     if message := st.session_state.pop("professor_assignment_success", None):
-        st.success(message)
+        show_success(message)
     is_draft = assignment.get("status", "draft") == "draft"
     st.caption("Save each question before switching questions or publishing the assignment.")
 
@@ -154,18 +159,23 @@ def show_assignment_editor(assignment_id, professor_id: str):
                 status_label = new_status = None
             if status_label and st.button(status_label, key=f"status_{assignment_key}"):
                 try:
-                    set_assignment_status(assignment_id, professor_id, new_status)
+                    if not set_assignment_status(assignment_id, professor_id, new_status):
+                        raise ValueError("Assignment status could not be saved. Reload and try again.")
                 except (ValueError, RuntimeError, PyMongoError) as error:
                     _show_error(error)
                 else:
+                    st.session_state.professor_assignment_success = "Assignment closed." if new_status == "closed" else "Assignment reopened."
                     st.rerun()
 
             confirm_delete = st.checkbox("Confirm assignment deletion")
             if st.button("Delete assignment", disabled=not confirm_delete):
                 try:
                     if delete_assignment(assignment_id, professor_id):
+                        st.session_state.professor_assignment_success = "Assignment deleted."
                         st.session_state.pop("selected_assignment_id", None)
                         st.switch_page(return_page)
+                    else:
+                        raise ValueError("Assignment could not be deleted. Reload and try again.")
                 except (ValueError, RuntimeError, PyMongoError) as error:
                     _show_error(error)
 
@@ -195,15 +205,20 @@ def show_assignment_editor(assignment_id, professor_id: str):
 
             try:
                 if save_problem:
-                    update_problem(
+                    saved = update_problem(
                         assignment_id,
                         professor_id,
                         problem_id,
                         authored_problem(problem_fields, problem_id=problem_id),
                     )
+                    if not saved:
+                        raise ValueError("Problem could not be saved. Reload and try again.")
+                    st.session_state.professor_assignment_success = "Problem saved."
                     st.rerun()
                 if remove_problem:
-                    delete_problem(assignment_id, professor_id, problem_id)
+                    if not delete_problem(assignment_id, professor_id, problem_id):
+                        raise ValueError("Problem could not be removed. Reload and try again.")
+                    st.session_state.professor_assignment_success = "Problem removed."
                     st.rerun()
             except (ValueError, RuntimeError, PyMongoError) as error:
                 _show_error(error)
@@ -215,7 +230,9 @@ def show_assignment_editor(assignment_id, professor_id: str):
                 add_submitted = st.form_submit_button("Add problem")
             if add_submitted:
                 try:
-                    add_problem(assignment_id, professor_id, authored_problem(new_fields))
+                    if not add_problem(assignment_id, professor_id, authored_problem(new_fields)):
+                        raise ValueError("Problem could not be added. Reload and try again.")
+                    st.session_state.professor_assignment_success = "Problem added."
                     st.rerun()
                 except (ValueError, RuntimeError, PyMongoError) as error:
                     _show_error(error)

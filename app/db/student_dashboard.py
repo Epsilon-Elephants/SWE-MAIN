@@ -5,6 +5,7 @@ from db.homework_submissions import list_submissions_for_student
 from homework.grades import effective_grade
 from homework.results import grading_label
 from homework.study import submission_recommendations
+from homework.analytics import summarize_scores
 
 
 def _latest_attempt(submission):
@@ -37,7 +38,10 @@ def load_student_overview(user_id):
         "classes": [
             {"_id": row["class_id"], "Class": classes.get(row["class_id"], "Class unavailable"),
              "Earned points": (row.get("grade") or {}).get("earned", 0),
-             "Possible points": (row.get("grade") or {}).get("possible", 0)}
+             "Possible points": (row.get("grade") or {}).get("possible", 0),
+             "insights": summarize_scores(attempt for attempt in submissions
+                                         if attempt.get("user_id") == user_id
+                                         and attempt.get("class_id") == row["class_id"])}
             for row in memberships
         ],
         "assignments": [

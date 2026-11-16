@@ -97,7 +97,9 @@ def test_overview_metrics_and_card_details():
     context = ({class_id: "Logic"}, {open_id: {"students": 3, "attempts": 4}})
     with patch("pages.dashboards.professor.list_assignments_for_professor", return_value=assignments), patch(
         "pages.dashboards.professor._load_assignment_context", return_value=context,
-    ), patch.object(db, "list_classes_page", return_value=([], False)):
+    ), patch.object(db, "list_classes_page", return_value=([], False)), patch(
+        "components.analytics.load_professor_analytics", return_value={"classes": {}},
+    ):
         app = dashboard_app(professor_id).run()
     assert not app.exception
     assert not app.metric

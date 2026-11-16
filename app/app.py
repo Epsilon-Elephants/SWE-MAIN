@@ -1,7 +1,9 @@
 import streamlit as st
+from components.notifications import show_notices
 
 st.set_page_config(page_title="Philosophy classroom", page_icon=":material/school:", layout="wide")
 st.session_state.setdefault("user", None)
+show_notices()
 user = st.session_state.user or {}
 role = user.get("permissions")
 if role in {"student", "professor"}:
