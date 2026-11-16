@@ -17,8 +17,8 @@ class LogicSymbolEditorTest(unittest.TestCase):
     def test_categories_match_course_symbol_list(self):
         self.assertEqual(LOGIC_SYMBOL_CATEGORIES, (
             ("Propositional Logic", (
-                ("~", "NOT"), ("&", "AND"), ("→", "IF/THEN"),
-                ("↔", "BICONDITIONAL"), ("∨", "OR"),
+                ("~", "Not"), ("&", "And"), ("→", "Implies"),
+                ("↔", "Biconditional"), ("∨", "Or"),
             )),
             ("Predicate Logic", (
                 ("∀", "Universal quantifier"), ("∃", "Existential quantifier"),
@@ -27,7 +27,7 @@ class LogicSymbolEditorTest(unittest.TestCase):
                 ("◇", "Possibly (Diamond)"), ("□", "Necessarily (Box)"),
             )),
             ("Other", (
-                ("⊢", "Therefore"), ("Φ", "Greek Phi"), ("Ψ", "Greek Psi"),
+                ("⊢", "Therefore"), ("Φ", "Greek Phi"), ("Ψ", "Greek Psi"), ("⥽", "Strict Conditional (Fish Hook)"),
             )),
         ))
 
