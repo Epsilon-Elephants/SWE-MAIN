@@ -1,6 +1,20 @@
 """Compact professor and personal topic insights using native Streamlit UI."""
 
 import streamlit as st
+import logging
+from pymongo.errors import PyMongoError
+from db.analytics import load_professor_analytics
+
+
+def professor_courses(professor_id, courses):
+    if not courses:
+        return []
+    try:
+        summaries = load_professor_analytics(professor_id, [course["_id"] for course in courses])["classes"]
+    except (ValueError, RuntimeError, PyMongoError):
+        logging.exception("Failed to load course analytics")
+        summaries = {}
+    return [{**course, "insights": summaries.get(course["_id"])} for course in courses]
 
 
 def professor_insights(summary, *, course=False):
@@ -12,7 +26,7 @@ def professor_insights(summary, *, course=False):
     st.caption(f"**Average grade: {average:.1f}%**" if average is not None else "Average grade: Not graded yet")
     if average is not None:
         count = summary["recorded_students"] if recorded else summary["graded_students"]
-        source = "professor-recorded course grades" if recorded else "latest Rocky grades per student"
+        source = "professor-recorded course grades" if recorded else "assignment grades per student (includes tentative Rocky scores)"
         st.caption(f"{count} graded student(s) · {source}")
     topics = summary.get("struggling_topics", [])
     if topics:

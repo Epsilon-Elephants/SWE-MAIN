@@ -17,6 +17,27 @@ def show_success(message):
     st.toast(message, icon=":material/check_circle:")
 
 
+def track_grading(submission_id):
+    st.session_state.setdefault("watched_grading", {})[str(submission_id)] = "ungraded"
+
+
+def observe_grading(submissions):
+    """Notify on observed state changes; opening old grades does not replay popups."""
+    watched = st.session_state.setdefault("watched_grading", {})
+    for row in submissions:
+        identifier, status = str(row["_id"]), row.get("grading_status", "ungraded")
+        previous = watched.get(identifier)
+        if previous is not None and previous != status and status in {"graded", "failed", "blocked"}:
+            if status == "failed" and row.get("grading_retry_at"):
+                queue_notice("Your work is saved. Rocky will retry grading automatically.", icon=":material/hourglass_top:")
+            else:
+                grading_notice(status)
+        watched[identifier] = status
+    # Keep session bookkeeping bounded, with recently observed submissions last.
+    st.session_state.watched_grading = dict(list(watched.items())[-200:])
+    show_notices()
+
+
 def grading_notice(status):
     message, icon = {
         "graded": ("Rocky finished grading. Scores and feedback are ready.", ":material/check_circle:"),

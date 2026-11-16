@@ -64,7 +64,7 @@ render_professor_classes("{professor_id}")
             db, "authorize_class_enrollment", return_value=classroom,
         ), patch.object(db, "list_students_for_class", return_value=([{"_id": student_id, "email": "ada@example.com"}], False)), patch.object(db, "enroll_student_as") as enroll:
             test_app.run()
-            listing.assert_called_with("", 0, 10, instructor_id=str(professor_id), active_only=True)
+            listing.assert_called_with("", 0, 5, instructor_id=str(professor_id), active_only=True)
             test_app.button(key=f"professor_class_{class_id}").click().run()
             test_app.segmented_control[0].set_value("Add students").run()
             test_app.button(key=f"professor_add_{class_id}_{student_id}").click().run()

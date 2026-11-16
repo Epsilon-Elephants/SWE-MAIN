@@ -260,6 +260,7 @@ def build_performance_from_graded_submissions(submissions):
     """Use actual problem scores and snapshot topics from graded homework."""
     from .grading import InvalidGrade, validate_grading_response
     from homework.schema import normalize_problems
+    from homework.grades import effective_grade
     import json
 
     attempts, questions = [], []
@@ -268,7 +269,7 @@ def build_performance_from_graded_submissions(submissions):
             continue
         try:
             problems = normalize_problems(submission["assignment_snapshot"]["problems"])
-            result = submission["grading_result"]
+            result = effective_grade(submission)
             # Revalidate stored data before it becomes recommendation evidence.
             validated = validate_grading_response(json.dumps({
                 "schema_version": result["schema_version"],

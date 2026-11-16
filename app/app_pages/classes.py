@@ -1,10 +1,9 @@
 import streamlit as st
 
-from pages.access import require_role
-from pages.dashboards.professor_classes import render_professor_classes
+from courses.views import show_courses
 
-user = require_role("professor")
-st.caption("TEACHING / CLASS MANAGEMENT")
-st.title("Your classes")
-st.caption("Manage enrollment and class grades for the classes you teach.")
-render_professor_classes(user["id"])
+user = st.session_state.get("user") or {}
+if user.get("permissions") not in {"professor", "student"} or not user.get("id"):
+    st.error("Sign in to view your courses.")
+    st.stop()
+show_courses(user)
