@@ -197,7 +197,11 @@ def show_assignment_editor(assignment_id, professor_id: str):
                     key=f"content_{assignment_key}_{problem_id}",
                     initial_content=problem.get("content", ""),
                 )
-                problem_fields = grading_fields(content, problem)
+                problem_fields = grading_fields(
+                    content,
+                    problem,
+                    key_prefix=f"problem_{assignment_key}_{problem_id}",
+                )
                 save_problem = st.form_submit_button("Save problem")
                 remove_problem = st.form_submit_button(
                     "Remove problem", disabled=len(assignment.get("problems", [])) <= 1,
@@ -224,14 +228,31 @@ def show_assignment_editor(assignment_id, professor_id: str):
                 _show_error(error)
 
         if selected_problem == "new":
-            with st.form(f"new_problem_{assignment_key}", clear_on_submit=False):
-                new_content = problem_editor("New problem", key=f"new_content_{assignment_key}")
-                new_fields = grading_fields(new_content)
+            new_problem_prefix = f"new_problem_{assignment_key}"
+            new_problem_keys = (
+                f"new_content_{assignment_key}",
+                f"{new_problem_prefix}_points",
+                f"{new_problem_prefix}_topic",
+                f"{new_problem_prefix}_reference_answer",
+                f"{new_problem_prefix}_grading_guidance",
+            )
+            if st.session_state.pop(f"{new_problem_prefix}_clear", False):
+                for key in new_problem_keys:
+                    st.session_state.pop(key, None)
+
+            with st.form(f"new_problem_{assignment_key}"):
+                new_content = problem_editor(
+                    "New problem", key=f"new_content_{assignment_key}",
+                )
+                new_fields = grading_fields(
+                    new_content, key_prefix=new_problem_prefix,
+                )
                 add_submitted = st.form_submit_button("Add problem")
             if add_submitted:
                 try:
                     if not add_problem(assignment_id, professor_id, authored_problem(new_fields)):
                         raise ValueError("Problem could not be added. Reload and try again.")
+                    st.session_state[f"{new_problem_prefix}_clear"] = True
                     st.session_state.professor_assignment_success = "Problem added."
                     st.rerun()
                 except (ValueError, RuntimeError, PyMongoError) as error:
