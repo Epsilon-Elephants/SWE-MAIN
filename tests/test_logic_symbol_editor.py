@@ -68,6 +68,10 @@ with st.form("problem_two"):
         app.run()
         self.assertFalse(app.exception)
         app.text_area(key="problem_one_reference_answer").set_value("Reference one")
+        next(
+            button for button in app.button if button.label == "Save first"
+        ).click().run()
+
         app.text_area(key="problem_two_reference_answer").set_value("Reference two")
         app.button(key="problem_two_reference_answer__logic_symbol_6").click().run()
 
