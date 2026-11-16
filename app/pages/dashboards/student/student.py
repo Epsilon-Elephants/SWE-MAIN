@@ -13,7 +13,11 @@ from db.student_dashboard import load_student_overview
 from components.compact_list import compact_list, close_compact_list
 from components.course_cards import course_cards, assignment_row
 from pages.dashboards.dashboard import Dashboard
+<<<<<<< Updated upstream
 from pages.dashboards.student.due_dates import badge_markdown, due_sort_key, due_status, resolve_timezone
+=======
+from pages.dashboards.student.due_dates import _as_utc, count_overdue, due_sort_key, due_status, resolve_timezone
+>>>>>>> Stashed changes
 from pages.dashboards.student.recently_visited import get_recent
 from rocky.rocky import rocky
 
@@ -33,6 +37,43 @@ def _render_coursework(row):
                    key=f"overview_homework_{row['_id']}", open_assignment=lambda: open_homework(row["_id"]))
 
 
+<<<<<<< Updated upstream
+=======
+def _render_submitted(row):
+    percentage = row.get("score_percentage")
+    metadata = " · ".join(filter(None, [row["class_name"], row.get("grade_label")]))
+    assignment_row(row["title"], metadata, f"{percentage:g}%" if percentage is not None else "Pending",
+                   key=f"overview_submitted_{row['_id']}", open_assignment=lambda: open_homework(row["_id"]))
+
+
+def _render_summary(assignments, now=None):
+    now = now or datetime.now(timezone.utc)
+    pending = [row for row in assignments if not row["submitted"]]
+    due_soon = sum(
+        row.get("due_date") is not None and now <= _as_utc(row["due_date"]) <= now + timedelta(days=7)
+        for row in pending
+    )
+    scores = [row["score_percentage"] for row in assignments if row.get("score_percentage") is not None]
+    overdue = count_overdue(assignments, now)
+    columns = st.columns(5)
+    columns[0].metric("To do", len(pending))
+    # Red "Late" note only appears when something is overdue.
+    columns[1].metric("Overdue", overdue, delta="Late, submit soon" if overdue else None,
+                      delta_color="inverse", delta_arrow="off",
+                      help="Unsubmitted assignments past their due date. Late work is still accepted.")
+    columns[2].metric("Due in 7 days", due_soon)
+    columns[3].metric("Submitted", len(assignments) - len(pending))
+    columns[4].metric("Average score", f"{sum(scores) / len(scores):.0f}%" if scores else "—",
+                      help="Average of each assignment's latest attempt. Includes tentative Rocky scores awaiting professor confirmation.")
+
+
+def _course_detail(class_id, assignments):
+    rows = [row for row in assignments if row.get("class_id") == class_id]
+    to_do = sum(not row["submitted"] for row in rows)
+    return f"{len(rows)} assignment{'s' if len(rows) != 1 else ''} · {to_do} to do"
+
+
+>>>>>>> Stashed changes
 def _render_recommendation(item):
     with st.container(border=True):
         st.markdown(f"**{item['topic']}**")

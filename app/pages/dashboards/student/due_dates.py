@@ -69,9 +69,25 @@ def due_status(due, now=None, tz=timezone.utc):
 
 
 def badge_markdown(status, submitted=False):
+<<<<<<< Updated upstream
     # streamlit badge for due date status or empty string if none
+=======
+    """Streamlit markdown for a colored status badge (empty when there is no due date)."""
+>>>>>>> Stashed changes
     if submitted:
         return ":green-badge[:material/check_circle: Submitted]"
     if status.kind == "none":
         return ""
+<<<<<<< Updated upstream
     return f":{status.color}-badge[{status.icon} {status.badge}]"
+=======
+    return f":{status.color}-badge[{status.icon} {status.badge}]"
+
+
+def count_overdue(assignments, now=None):
+    """Number of unsubmitted assignments whose due date has passed."""
+    return sum(
+        not row["submitted"] and due_status(row.get("due_date"), now=now).kind == "overdue"
+        for row in assignments
+    )
+>>>>>>> Stashed changes
