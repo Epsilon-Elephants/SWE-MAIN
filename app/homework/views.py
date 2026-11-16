@@ -16,6 +16,7 @@ from homework.grading import grade_submission
 from homework.results import grading_action, grading_label, show_problem_result
 
 from pages.dashboards.student.recently_visited import record_visit
+from components.notifications import grading_notice, queue_notice, show_notices
 
 
 ERRORS = (ValueError, RuntimeError, PyMongoError)
@@ -88,6 +89,7 @@ def show_homework_list():
 
 
 def show_homework_assignment():
+    show_notices()
     user = student_user()
     if st.button("Back to homework", icon=":material/arrow_back:"):
         st.switch_page("app_pages/homework.py")
@@ -133,15 +135,18 @@ def show_homework_assignment():
             submitted = st.form_submit_button("Submit homework", type="primary", icon=":material/send:")
         if submitted:
             submission_id = submit_homework(assignment_id, user["id"], answers)
+            st.toast("Homework saved and sent to Rocky for grading.", icon=":material/send:")
             try:
                 with st.spinner("Rocky is grading your answers…"):
-                    grade_submission(submission_id, user["id"])
+                    status = grade_submission(submission_id, user["id"])
+                grading_notice(status)
             except (ValueError, RuntimeError, PyMongoError):
                 # Saving succeeded. Preserve that fact if grading persistence fails.
                 logging.warning("Homework saved but grading could not finish")
                 st.session_state.homework_grading_notice = (
                     "Your homework is saved. Grading could not finish; retry the saved attempt when it becomes available."
                 )
+                queue_notice(st.session_state.homework_grading_notice, icon=":material/error:")
             st.rerun()
     except ERRORS as error:
         if isinstance(error, ValueError):

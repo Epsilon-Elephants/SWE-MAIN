@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 import streamlit as st
 
 from homework.grading import grade_submission
+from components.notifications import grading_notice
 
 
 def grading_label(submission):
@@ -41,6 +42,8 @@ def grading_action(submission, actor_id):
         st.warning("Your work is saved. Rocky could not finish grading; you can retry this attempt.")
     if st.button("Retry grading" if status in ("failed", "grading", "blocked") else "Grade submission",
                  key=f"grade_submission_{submission['_id']}", disabled=busy):
+        st.toast("Your saved answers were sent to Rocky for grading.", icon=":material/send:")
         with st.spinner("Rocky is grading the saved answers…"):
-            grade_submission(submission["_id"], actor_id)
+            result = grade_submission(submission["_id"], actor_id)
+        grading_notice(result)
         st.rerun()

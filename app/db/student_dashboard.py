@@ -2,6 +2,7 @@
 from db.DataBase import db
 from db.assignments import list_assignments_for_student
 from db.homework_submissions import list_submissions_for_student
+from homework.analytics import summarize_scores
 
 
 def load_student_overview(user_id):
@@ -20,7 +21,10 @@ def load_student_overview(user_id):
         "classes": [
             {"Class": classes.get(row["class_id"], "Class unavailable"),
              "Earned points": (row.get("grade") or {}).get("earned", 0),
-             "Possible points": (row.get("grade") or {}).get("possible", 0)}
+             "Possible points": (row.get("grade") or {}).get("possible", 0),
+             "insights": summarize_scores(attempt for attempt in submissions
+                                         if attempt.get("user_id") == user_id
+                                         and attempt.get("class_id") == row["class_id"])}
             for row in memberships
         ],
         "assignments": [

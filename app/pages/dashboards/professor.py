@@ -11,6 +11,10 @@ from db.homework_submissions import summarize_submissions
 from pages.dashboards.dashboard import Dashboard
 from pages.dashboards.professor_classes import render_professor_classes
 from components.dashboard_header import render_dashboard_header
+from components.analytics import professor_insights
+from components.notifications import show_notices, show_success
+from db.analytics import load_professor_analytics
+from homework.analytics import summarize_scores
 
 logger = logging.getLogger(__name__)
 
@@ -80,6 +84,13 @@ def _load_assignment_context(professor_id, assignments):
         logger.exception("Failed to load professor dashboard details")
         st.caption("Class names and submission counts are unavailable right now.")
         return {}, {}
+    try:
+        analytics = load_professor_analytics(professor_id, class_names)["assignments"]
+        for assignment in assignments:
+            summary = completions.setdefault(assignment["_id"], {"students": 0, "attempts": 0})
+            summary["analytics"] = analytics.get(assignment["_id"], summarize_scores([]))
+    except (ValueError, RuntimeError, PyMongoError):
+        logger.exception("Failed to load assignment analytics")
     return class_names, completions
 
 
@@ -160,6 +171,7 @@ def _render_assignment_card(assignment, state, class_name=None, summary=None):
         st.caption(" · ".join(details))
         if description := assignment.get("description"):
             st.write(description)
+        professor_insights((summary or {}).get("analytics"))
         if state != "draft":
             summary = summary or {"students": 0, "attempts": 0}
             st.caption(
@@ -195,6 +207,7 @@ class professorDash(Dashboard):
         super().__init__()
 
     def load_dash(self):
+        show_notices()
         render_dashboard_header(
             "Professor Dashboard",
             f"Welcome back, {st.session_state.user.get('first_name') or 'Professor'}",
@@ -220,7 +233,7 @@ class professorDash(Dashboard):
         with assignments_column:
             st.subheader("Active assignments")
             if message := st.session_state.pop("professor_assignment_success", None):
-                st.success(message)
+                show_success(message)
             if st.button("Create assignment", type="primary", icon=":material/add:"):
                 st.session_state.pop("professor_enrollment_class", None)
                 st.session_state.pop("professor_roster_class", None)

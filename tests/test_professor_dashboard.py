@@ -122,7 +122,9 @@ professorDash().load_dash()
 ''')
         with patch("pages.dashboards.professor.list_assignments_for_professor", return_value=assignments), patch.object(
             db, "list_classes_page", return_value=([{"_id": ObjectId(), "name": "Calculus"}], False),
-        ), patch("pages.dashboards.professor._load_assignment_context", return_value=({}, {})):
+        ), patch("pages.dashboards.professor._load_assignment_context", return_value=({}, {})), patch(
+            "pages.dashboards.professor_classes.load_professor_analytics", return_value={"classes": {}},
+        ):
             app.run()
         self.assertFalse(app.exception)
         columns = [column for column in app.get("column") if column.subheader]
