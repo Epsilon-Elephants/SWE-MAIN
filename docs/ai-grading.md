@@ -233,10 +233,11 @@ is preserved. Choosing **Use Rocky's original grade** after an override confirms
 that original result without making another model request.
 
 Student course pages show a compact score bar above course navigation, refreshed
-every five seconds. Green shows confirmed earned points, amber shows unconfirmed
-Rocky earned points, and gray shows points not earned on the included graded work.
-Text below shows confirmed earned/possible points, tentative earned/possible
-points, and the combined estimate. A course with no grades shows an empty bar
+every five seconds. Green shows confirmed earned points, orange extends it by
+unconfirmed Rocky earned points, and gray shows points not earned on the included
+graded work. The segments and labels all use the same total of graded possible
+points: confirmed points, extra tentative points, and the total if confirmed.
+Fixed green and orange fills are preserved in both app themes. A course with no grades shows an empty bar
 without inventing a percentage. Each refresh rechecks the student's role and
 enrollment and reads only that student's course submissions.
 
@@ -248,8 +249,9 @@ pending resubmission does not turn a known score into zero, and a new tentative
 attempt cannot add points on top of an already confirmed assignment. Pending,
 failed, and unsubmitted work adds no score or denominator.
 
-For example, confirmed **8/10** plus unconfirmed Rocky **3/5** produces an actual
-confirmed percentage of **80%** and a combined estimate of **11/15 (73.33%)**.
+For example, confirmed **8/10** plus unconfirmed Rocky **3/5** fills the bar with
+green **8/15 (53.33%)**, followed by orange **3/15 (20%)**, reaching a combined
+estimate of **11/15 (73.33%)**.
 Confirming the second score moves its 3/5 into the confirmed total; it is never
 counted in both buckets. Separately entered enrollment/class grades remain in a
 collapsed **Professor-recorded course grade** section and are not mixed into

@@ -1,10 +1,12 @@
 """Tentative and confirmed totals count each assignment once, including retries."""
 
 import copy
+import json
 from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
 
 import pytest
+import pyarrow as pa
 from bson import ObjectId
 from streamlit.testing.v1 import AppTest
 
@@ -45,6 +47,49 @@ def test_confirmation_moves_points_between_buckets_without_changing_total():
     assert after["confirmed"]["earned"] == 3
     assert after["tentative"]["earned"] == after["tentative"]["possible"] == 0
     assert before["combined"] == after["combined"]
+
+
+@pytest.mark.parametrize("rows,expected", [
+    ([attempt(earned=4, possible=5, confirmed=4), attempt(earned=3, possible=5)], [(0, 4), (4, 7), (7, 10)]),
+    ([attempt(earned=7, possible=10)], [(0, 0), (0, 7), (7, 10)]),
+    ([attempt(earned=7, possible=10, confirmed=7)], [(0, 7), (7, 7), (7, 10)]),
+])
+def test_score_bar_renders_green_then_orange_on_the_same_point_scale(rows, expected):
+    app = AppTest.from_string('''
+import streamlit as st
+from components.course_scores import show_score_bar
+show_score_bar(st.session_state.summary)
+''')
+    app.session_state.summary = course_score_summary(rows)
+    app.run()
+    assert not app.exception
+    chart = app.get("vega_lite_chart")[0].proto
+    spec = json.loads(chart.spec)
+    segments = pa.ipc.open_stream(chart.data.data).read_all().to_pylist()
+    assert [(row["start"], row["end"]) for row in segments] == expected
+    assert spec["encoding"]["color"]["scale"]["range"][:2] == ["#2D9B64", "#F59E0B"]
+    assert chart.theme == ""  # App chart palettes must not replace the status colors.
+    assert sum(row["percentage"] for row in segments) == pytest.approx(100)
+
+
+def test_confirming_rocky_grade_changes_orange_to_green_without_extending_the_bar():
+    row = attempt(earned=7, possible=10)
+    app = AppTest.from_string('''
+import streamlit as st
+from components.course_scores import show_score_bar
+show_score_bar(st.session_state.summary)
+''')
+    app.session_state.summary = course_score_summary([row])
+    app.run()
+    before = pa.ipc.open_stream(app.get("vega_lite_chart")[0].proto.data.data).read_all().to_pylist()
+    row["professor_grade"] = {**row["grading_result"], "graded_at": NOW}
+    app.session_state.summary = course_score_summary([row])
+    app.run()
+    assert not app.exception
+    after = pa.ipc.open_stream(app.get("vega_lite_chart")[0].proto.data.data).read_all().to_pylist()
+    assert (before[0]["points"], before[1]["points"]) == (0, 7)
+    assert (after[0]["points"], after[1]["points"]) == (7, 0)
+    assert before[1]["end"] == after[1]["end"] == 7
 
 
 def test_latest_confirmation_wins_even_for_an_older_attempt_and_new_attempts_do_not_add_points():
@@ -109,8 +154,8 @@ def test_student_course_header_shows_scoped_score_bar_in_every_section(section):
         app.segmented_control(key=f"course_section_{cid}").set_value(section).run()
         assert not app.exception
         captions = " ".join(row.value for row in app.caption)
-        assert "8/10 · 80%" in captions
-        assert "3/5 · 60%" in captions
+        assert "8/15 · 53.33%" in captions
+        assert "+3/15 · +20%" in captions
         assert "11/15 · 73.33%" in captions
         assert len(app.get("vega_lite_chart")) == 1
         assert "PRIVATE" not in " ".join(row.value for row in [*app.caption, *app.markdown, *app.text])

@@ -10,25 +10,36 @@ def show_score_bar(summary):
         st.caption("No graded assignment scores yet. Rocky's scores will appear here as tentative.")
         st.progress(0)
         return
-    remaining = max(0, combined["possible"] - combined["earned"])
-    muted = "#344454" if st.context.theme.type == "dark" else "#E0E5EB"
+    total = combined["possible"]
+    remaining = max(0, total - combined["earned"])
+    dark = st.context.theme.type == "dark"
+    muted = "#344454" if dark else "#E0E5EB"
     data = [
-        {"category": "Confirmed", "points": confirmed["earned"], "order": 0, "row": "Score"},
-        {"category": "Tentative (Rocky)", "points": tentative["earned"], "order": 1, "row": "Score"},
-        {"category": "Not earned", "points": remaining, "order": 2, "row": "Score"},
+        {"category": "Confirmed", "points": confirmed["earned"], "start": 0, "end": confirmed["earned"], "row": "Score"},
+        {"category": "Tentative (Rocky)", "points": tentative["earned"],
+         "start": confirmed["earned"], "end": combined["earned"], "row": "Score"},
+        {"category": "Not earned", "points": remaining, "start": combined["earned"], "end": total, "row": "Score"},
     ]
+    for segment in data:
+        segment["percentage"] = segment["points"] / total * 100
     chart = alt.Chart(alt.Data(values=data)).mark_bar(size=16).encode(
-        x=alt.X("points:Q", stack="zero", axis=None, scale=alt.Scale(domain=[0, combined["possible"]], nice=False)),
+        x=alt.X("start:Q", axis=None, scale=alt.Scale(domain=[0, total], nice=False)),
+        x2=alt.X2("end:Q"),
         y=alt.Y("row:N", axis=None),
         color=alt.Color("category:N", scale=alt.Scale(
-            domain=["Confirmed", "Tentative (Rocky)", "Not earned"], range=["#2D9B64", "#D59A25", muted],
+            domain=["Confirmed", "Tentative (Rocky)", "Not earned"], range=["#2D9B64", "#F59E0B", muted],
         ), legend=alt.Legend(title=None, orient="bottom", direction="horizontal")),
-        order=alt.Order("order:Q"),
-        tooltip=[alt.Tooltip("category:N", title="Status"), alt.Tooltip("points:Q", title="Points", format=".2f")],
-    ).properties(height=20).configure_view(stroke=None)
-    st.altair_chart(chart, width="stretch")
-    for column, label, values in zip(st.columns(3), ["Confirmed", "Tentative Rocky", "With tentative"], [confirmed, tentative, combined]):
-        score = (f"{values['earned']:g}/{values['possible']:g} · {values['percentage']:g}%"
-                 if values["possible"] else ("Awaiting confirmation" if label == "Confirmed" else "No tentative scores"))
+        tooltip=[alt.Tooltip("category:N", title="Status"), alt.Tooltip("points:Q", title="Points", format=".2f"),
+                 alt.Tooltip("percentage:Q", title="% of graded points", format=".2f")],
+    ).properties(height=20).configure(background="transparent").configure_view(stroke=None).configure_legend(
+        labelColor="#FAFAFA" if dark else "#31333F",
+    )
+    # Keep the requested green/orange fills in both app themes.
+    st.altair_chart(chart, width="stretch", theme=None)
+    for column, label, values in zip(st.columns(3), ["Confirmed", "Tentative Rocky", "If confirmed"], [confirmed, tentative, combined]):
+        percentage = round(values["earned"] / total * 100, 2)
+        prefix = "+" if label == "Tentative Rocky" else ""
+        score = f"{prefix}{values['earned']:g}/{total:g} · {prefix}{percentage:g}%"
         column.caption(f"**{label}**  \n{score}")
-    st.caption("Based on scored assignments. Confirmed scores count toward your grade; tentative scores await professor confirmation. Each assignment counts once.")
+    st.caption("Green is confirmed. Orange shows the extra points if your professor confirms Rocky's current grades. "
+               "Both use the same total of graded points; each assignment counts once.")
