@@ -40,6 +40,7 @@ def logic_symbol_editor(
     *,
     height: int = 160,
     help: str | None = None,
+    placeholder: str | None = None,
 ) -> str:
     """Render a text area and a categorized symbol popover in a Streamlit form.
 
@@ -55,10 +56,13 @@ def logic_symbol_editor(
         st.session_state[key] = append_logic_symbol(current_content, pending_symbol)
 
     if key in st.session_state:
-        value = st.text_area(label, key=key, height=height, help=help)
+        value = st.text_area(
+            label, key=key, height=height, help=help, placeholder=placeholder,
+        )
     else:
         value = st.text_area(
             label, value=initial_content, key=key, height=height, help=help,
+            placeholder=placeholder,
         )
 
     with st.popover(

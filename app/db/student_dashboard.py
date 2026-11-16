@@ -2,6 +2,21 @@
 from db.DataBase import db
 from db.assignments import list_assignments_for_student
 from db.homework_submissions import list_submissions_for_student
+from homework.grades import effective_grade
+from homework.results import grading_label
+from homework.study import submission_recommendations
+from homework.analytics import summarize_scores
+
+
+def _latest_attempt(submission):
+    """Student-safe summary of the latest attempt: when, a score label, and the percentage."""
+    if submission is None:
+        return {"submitted_at": None, "grade_label": None, "score_percentage": None}
+    return {
+        "submitted_at": submission.get("submitted_at"),
+        "grade_label": grading_label(submission),
+        "score_percentage": (effective_grade(submission) or {}).get("percentage"),
+    }
 
 
 def load_student_overview(user_id):
@@ -15,20 +30,30 @@ def load_student_overview(user_id):
     )} if class_ids else {}
     assignments = list_assignments_for_student(user_id)
     submissions = list_submissions_for_student(user_id)
-    submitted = {row["assignment_id"] for row in submissions}
+    # Submissions are sorted newest first, so the first one per assignment is the latest attempt.
+    latest = {}
+    for row in submissions:
+        latest.setdefault(row["assignment_id"], row)
     return {
         "classes": [
-            {"Class": classes.get(row["class_id"], "Class unavailable"),
+            {"_id": row["class_id"], "Class": classes.get(row["class_id"], "Class unavailable"),
              "Earned points": (row.get("grade") or {}).get("earned", 0),
-             "Possible points": (row.get("grade") or {}).get("possible", 0)}
+             "Possible points": (row.get("grade") or {}).get("possible", 0),
+             "insights": summarize_scores(attempt for attempt in submissions
+                                         if attempt.get("user_id") == user_id
+                                         and attempt.get("class_id") == row["class_id"])}
             for row in memberships
         ],
         "assignments": [
             {"_id": row["_id"], "title": row["title"], "due_date": row.get("due_date"),
+             "class_id": row["class_id"],
              "class_name": classes.get(row["class_id"], "Class unavailable"),
-             "submitted": row["_id"] in submitted}
+             "submitted": row["_id"] in latest,
+             **_latest_attempt(latest.get(row["_id"]))}
             for row in assignments
         ],
         "attempts": len(submissions),
-        "awaiting_grading": sum(row.get("grading_status") == "ungraded" for row in submissions),
+        "awaiting_grading": sum(row.get("grading_status") in {"ungraded", "grading", "blocked"}
+                                 or bool(row.get("grading_retry_at")) for row in submissions),
+        "recommendations": submission_recommendations(submissions),
     }

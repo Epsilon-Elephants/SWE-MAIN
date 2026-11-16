@@ -17,7 +17,7 @@ def editing(monkeypatch):
     assignment_id, professor_id = ObjectId(), str(ObjectId())
     document = {"problems": [
         {"problem_id": "first", "content": "First", "points": 5,
-         "reference_answer": "Private answer"},
+         "reference_answer": "Private answer", "topic": "Logic"},
         {"problem_id": "second", "content": "Second", "points": 2},
     ]}
     read = Mock(return_value=document)
@@ -30,19 +30,19 @@ def editing(monkeypatch):
 def test_adding_a_problem_preserves_others_and_scopes_read_and_write(editing):
     assignment_id, professor_id, document, read, update = editing
     original = deepcopy(document)
-    problem_id = assignments.add_problem(assignment_id, professor_id, "  Third  ")
+    problem_id = assignments.add_problem(assignment_id, professor_id, {"content": "  Third  ", "topic": "Logic", "reference_answer": "Third answer"})
     query = {"_id": assignment_id, "professor_id": professor_id}
     read.assert_called_once_with("assignments", query)
     update.assert_called_once_with("assignments", query, {"problems": [
         *original["problems"], {"schema_version": 1, "problem_id": problem_id,
                               "type": "short_answer", "content": "Third", "points": 1.0,
-                              "topic": "", "reference_answer": "", "grading_guidance": ""},
+                              "topic": "Logic", "reference_answer": "Third answer", "grading_guidance": ""},
     ]})
     assert problem_id not in {"first", "second"}
     assert document == original
 
 
-@pytest.mark.parametrize("content", [" Revised ", {"problem_id": "replacement", "content": " Revised ", "points": 3}])
+@pytest.mark.parametrize("content", [" Revised ", {"problem_id": "replacement", "content": " Revised ", "points": 3, "topic": "Logic", "reference_answer": "Answer"}])
 def test_edits_keep_target_id_other_problems_and_original_document(editing, content):
     assignment_id, professor_id, document, read, update = editing
     original = deepcopy(document)
@@ -73,7 +73,7 @@ def test_delete_only_removes_selected_problem_from_owned_assignment(editing):
 
 
 @pytest.mark.parametrize("operation,extra,expected", [
-    (assignments.add_problem, ("New",), None),
+    (assignments.add_problem, ({"content": "New", "topic": "Logic", "reference_answer": "Answer"},), None),
     (assignments.update_problem, ("first", "New"), False),
     (assignments.delete_problem, ("first",), False),
 ])
@@ -96,7 +96,7 @@ def test_unknown_problem_never_rewrites_assignment(editing, operation, extra):
 
 
 @pytest.mark.parametrize("operation,extra,expected", [
-    (assignments.add_problem, ("New",), None),
+    (assignments.add_problem, ({"content": "New", "topic": "Logic", "reference_answer": "Answer"},), None),
     (assignments.update_problem, ("first", "New"), False),
     (assignments.delete_problem, ("first",), False),
 ])

@@ -12,10 +12,6 @@ def _return_from_settings():
     st.switch_page("app_pages/overview.py")
 
 
-def _logout():
-    st.session_state.clear()
-
-
 def load_settings_page():
     user = st.session_state.get("user") or {}
     if not user:
@@ -33,7 +29,7 @@ def load_settings_page():
     ):
         _return_from_settings()
     title_column.title("Settings")
-    title_column.caption("Manage your account and session.")
+    title_column.caption("Manage your account and appearance.")
     spacer.empty()
 
     account_column = st.container()
@@ -44,15 +40,7 @@ def load_settings_page():
         st.text_input("Email", value=user.get("email", ""), disabled=True)
         st.text_input("Role", value=user.get("permissions", ""), disabled=True)
 
-    with st.container(key="settings_session_card", border=True):
-        session_text, logout_column = st.columns([4, 1], vertical_alignment="center")
-        session_text.markdown("### Session")
-        session_text.caption("Sign out of this account on the current device.")
-        if logout_column.button(
-            "Log out",
-            key="settings_logout",
-            type="primary",
-            width="stretch",
-        ):
-            _logout()
-            st.rerun()
+    with st.container(border=True):
+        st.markdown("### Appearance")
+        st.write("Choose Light, Dark, or Use system setting from the theme selector in the app's top-right settings menu.")
+    st.caption("Use Log out in the sidebar to end your session.")

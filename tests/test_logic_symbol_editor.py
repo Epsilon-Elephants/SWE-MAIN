@@ -148,6 +148,7 @@ show_assignment_editor("{assignment_id}", "{professor_id}")
         ):
             app.run()
             self.assertFalse(app.exception)
+            app.selectbox(key=f"selected_problem_{assignment_id}").set_value("new").run()
             app.text_area(key=content_key).set_value("New problem")
             app.button(key=f"{content_key}__logic_symbol_2").click().run()
 

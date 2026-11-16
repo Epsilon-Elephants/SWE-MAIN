@@ -3,12 +3,30 @@
 Streamlit application for professor-managed classes, short-answer homework, and
 the Rocky AI assistant. Students can submit homework and review their attempts.
 Homework answers are saved first, then Rocky grades each problem against the professor’s reference answer and optional rubric. Students and professors can review scores and feedback; failed grading can be retried.
+Submissions process in the background and include topic-specific practice suggestions.
+The student overview links directly to coursework and shows what to practice next.
+Long lists show five entries, with more in paginated popups. Light and dark themes
+are available in the top-right app settings; logout stays in the sidebar.
+The dashboard now uses course cards and a short To do panel. Course workspaces
+separate Assignments, Grades, and professor People management. Assignment editing
+shows one question at a time. New/edited questions require a prompt, topic,
+reference answer, and positive points; blank partial-credit criteria let Rocky
+choose reasonable partial credit.
+Rocky scores are tentative until a professor confirms or overrides them. Student
+course pages show a compact bar with confirmed points, unconfirmed Rocky points,
+and a combined estimate; each assignment contributes only once.
+
+Professor assignment and class cards show average grades and topics students need
+to practice. Each student class card includes a private focus-topic panel. Status
+popups confirm saves, questions sent to Rocky, and grading results, including
+failed or blocked grading.
 
 ## Documentation
 
 - [Product audit — October 26, 2026](docs/product-audit-2026-10-26.md): requirement coverage, defects, changes, verification, and remaining work.
 - [Local setup and development](docs/development.md): configuration, running the app, tests, and common setup issues.
 - [How the application works](docs/architecture.md): navigation, responsibilities, collections, and access rules.
+- [Dashboard analytics](docs/analytics.md): averages, focus topics, privacy, and status popups.
 - [Problem format and AI integration](docs/ai-grading.md): problem fields, grading input/output, automatic scores, retries, and database setup.
 - [Assignments and submissions](docs/assignments.md): dates, authoring helpers, submission history, and database validation.
 - [Problem JSON Schema](docs/homework-problem.schema.json): the canonical v1 problem document.
@@ -70,6 +88,7 @@ current implementation and do not imply that a bug was previously reported.
 | Classes and grades | Professor ownership, enrollment, grade validation, literal searches, pagination, and class-scoped roster queries. |
 | Homework | Student access, answer validation, automatic problem grades, retries, saved history, and private instructor fields staying out of student pages. |
 | Rocky and pages | Mocked HTTP/stream handling, topic analysis, and existing dashboard/settings/navigation regressions through AppTest. |
+| Dashboard analytics and status | Latest graded attempts, grade averages, private student topic summaries, professor class scoping, and one-time save/grading/chat popups. |
 
 Generate the same reports as CI:
 
