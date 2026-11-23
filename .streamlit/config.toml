@@ -17,7 +17,11 @@ headingFont = "sans-serif"
 headingFontWeights = [600, 600, 600, 600, 600, 600]
 
 [theme.light]
-primaryColor = "#254D70"
+# Warm gold accent marks where to click: primary buttons (Log in, Create assignment,
+# Submit homework), selected tabs, and toggles. Deep enough that the white text
+# Streamlit puts on primary buttons meets WCAG AA (4.6:1). Navy stays the brand
+# color through the sidebar and links.
+primaryColor = "#9E6A14"
 backgroundColor = "#FFFFFF"
 secondaryBackgroundColor = "#F5F7FA"
 textColor = "#242D35"
@@ -25,13 +29,14 @@ linkColor = "#254D70"
 borderColor = "#DFE5EB"
 dataframeHeaderBackgroundColor = "#F5F7FA"
 chartCategoricalColors = ["#254D70", "#B58937", "#557565", "#9C6262"]
-# Academic gold accent: tentative (unconfirmed) scores use "yellow" badges.
-yellowColor = "#B58937"
-yellowBackgroundColor = "#F6EEDC"
-yellowTextColor = "#7A5A1E"
+# Status badges stay off the accent: tentative scores use a navy tint ("blue"),
+# so gold remains a signal for actions only.
+blueColor = "#254D70"
+blueBackgroundColor = "#E4ECF4"
+blueTextColor = "#254D70"
 
 [theme.dark]
-primaryColor = "#4179A3"
+primaryColor = "#9E6A14"
 backgroundColor = "#111D29"
 secondaryBackgroundColor = "#1C2D3D"
 textColor = "#EEF1F5"
@@ -39,9 +44,9 @@ linkColor = "#9ACAF0"
 borderColor = "#415365"
 dataframeHeaderBackgroundColor = "#1C2D3D"
 chartCategoricalColors = ["#9ACAF0", "#E8C46D", "#97C9AE", "#DDA5A5"]
-yellowColor = "#E8C46D"
-yellowBackgroundColor = "#3A3222"
-yellowTextColor = "#E8C46D"
+blueColor = "#9ACAF0"
+blueBackgroundColor = "#1F3346"
+blueTextColor = "#9ACAF0"
 
 [theme.sidebar]
 backgroundColor = "#172D40"

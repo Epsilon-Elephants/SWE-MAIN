@@ -93,7 +93,7 @@ def test_professor_sees_one_row_per_student_with_attempts_in_a_dropdown():
     app = grade_list_app(student_rows(3))
     assert not app.exception
     labels = [row.label for row in app.expander]
-    assert labels == [f"**Student {n:02d}** · 3 attempts · :yellow-badge[Highest 7/10 · 70%]" for n in range(3)]
+    assert labels == [f"**Student {n:02d}** · 3 attempts · :blue-badge[Highest 7/10 · 70%]" for n in range(3)]
     assert len([button for button in app.button if button.label == "Review"]) == 9
     assert "3 students · 9 attempts · 3 awaiting your review" in [row.value for row in app.caption]
     # The counted attempt is marked inside each dropdown.
@@ -133,3 +133,53 @@ def test_review_queue_counts_students_once_and_scopes_to_given_assignments():
     assert pipeline[0] == {"$match": {"assignment_id": {"$in": [homework]}}}
     assert pipeline[1]["$group"]["_id"] == {"assignment": "$assignment_id", "student": "$user_id"}
     assert count_awaiting_review([]) == {}
+
+
+def test_course_grades_show_one_dropdown_per_assignment_built_only_when_opened():
+    professor, course = ObjectId(), ObjectId()
+    homework = [{"_id": ObjectId(), "title": f"Homework {n}", "class_id": course, "status": "published",
+                 "due_date": START + timedelta(days=n)} for n in (1, 2)]
+    students = [ObjectId(), ObjectId()]
+    rows = []
+    for assignment in homework:
+        for student in students:
+            for day in range(2):
+                row = attempt(6 + day, day=day, user=student, assignment=assignment["_id"])
+                row["class_id"] = course
+                rows.append(row)
+    users = [{"_id": uid, "first_name": name, "last_name": "Student"} for uid, name in zip(students, ("Ada", "Ben"))]
+
+    def find(collection, query):
+        return {"homework_submissions": rows, "users": users}[collection]
+
+    def read_one(collection, query):
+        return {"_id": course, "name": "Logic", "instructor_id": professor} if collection == "classes" else {"permissions": "professor"}
+
+    with patch.object(db, "find", side_effect=find), patch.object(db, "read_one", side_effect=read_one), patch(
+        "courses.views.list_assignments_for_professor", return_value=homework,
+    ):
+        app = AppTest.from_string('from courses.views import show_course\nimport streamlit as st\nshow_course(st.session_state.user)')
+        app.session_state.user = {"id": str(professor), "permissions": "professor"}
+        app.session_state.course_id = str(course)
+        app.run()
+        app.segmented_control(key=f"course_section_{course}").set_value("Grades").run()
+        assert not app.exception
+        # Newest due date first; one collapsed line per assignment, nothing built inside yet.
+        assert [row.label for row in app.expander] == [
+            "**Homework 2** · 2 students · avg 70% · :orange-badge[2 awaiting review]",
+            "**Homework 1** · 2 students · avg 70% · :orange-badge[2 awaiting review]",
+        ]
+        assert not [button for button in app.button if button.label == "Review"]
+        app.session_state[f"course_grades_opened_{course}"] = {str(homework[1]["_id"])}
+        app.run()
+        assert not app.exception
+        # Confirming a grade changes the header text; the open dropdown must stay open.
+        graded = next(row for row in rows if row["assignment_id"] == homework[1]["_id"])
+        graded["professor_grade"] = {"total_points": 7.0, "max_points": 10.0, "percentage": 70.0,
+                                     "problems": [], "graded_at": START}
+        app.run()
+        assert app.expander[0].label.endswith(":orange-badge[1 awaiting review]")
+        assert len([button for button in app.button if button.label == "Review"]) == 4
+    rows_text = [row.value for row in app.markdown]
+    assert "**Ada Student** · 2 attempts" in rows_text and "**Ben Student** · 2 attempts" in rows_text
+    assert len([button for button in app.button if button.label == "Review"]) == 4  # attempts live in popovers

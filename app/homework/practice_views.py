@@ -74,7 +74,7 @@ def _render_plan_section(user_id, has_scores):
         "Rocky looks at your score on each topic across all graded attempts and suggests what to review. "
         "Only topic names and scores are sent to Kent State's Rocky; your answers are not."
     )
-    if st.button("Build my review plan", key="practice_build_plan", icon=":material/auto_awesome:",
+    if st.button("Build my review plan", key="practice_build_plan", icon=":material/auto_awesome:", type="primary",
                  disabled=not has_scores, help=None if has_scores else "Available once homework is graded."):
         requested_by, requested_at = st.session_state.get(PLAN_REQUESTED_KEY, (None, None))
         wait = (PLAN_COOLDOWN_SECONDS - (monotonic() - requested_at)

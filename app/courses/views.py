@@ -115,60 +115,61 @@ def _name(user):
     return " ".join(filter(None, [user.get("first_name"), user.get("last_name")])) or "Unknown student"
 
 
-def _unique_titles(assignments):
-    """Gradebook column per assignment; repeated titles get a numeric suffix."""
-    seen, titles = {}, {}
-    for row in assignments:
-        title = row.get("title") or "Untitled"
-        seen[title] = seen.get(title, 0) + 1
-        titles[row["_id"]] = title if seen[title] == 1 else f"{title} ({seen[title]})"
-    return titles
+def _assignment_label(assignment, students):
+    """Dropdown header: title, how many submitted, average counted grade, review status."""
+    percentages = [value for value in (kept_percentage(attempts) for attempts in students.values()) if value is not None]
+    waiting = sum(needs_review(attempts) for attempts in students.values())
+    parts = [f"**{assignment.get('title', 'Untitled')}**",
+             f"{len(students)} student{'s' if len(students) != 1 else ''}"]
+    if percentages:
+        parts.append(f"avg {sum(percentages) / len(percentages):.0f}%")
+    parts.append(f":orange-badge[{waiting} awaiting review]" if waiting else ":green-badge[All confirmed]")
+    return " · ".join(parts)
 
 
-def _gradebook(rows, student_ids, users, assignments):
-    """One row per enrolled student, one column per assignment: the grade that counts."""
-    titles = _unique_titles(assignments)
-    by_student = group_attempts(rows, "user_id")
-    records = []
-    for uid in sorted(student_ids, key=lambda value: _name(users.get(value)).casefold()):
-        per_assignment = group_attempts(by_student.get(uid, []), "assignment_id")
-        record = {"Student": _name(users.get(uid))}
-        for assignment in assignments:
-            attempts = per_assignment.get(assignment["_id"])
-            record[titles[assignment["_id"]]] = kept_percentage(attempts) if attempts else None
-        record["Awaiting review"] = sum(needs_review(attempts) for attempts in per_assignment.values())
-        records.append(record)
-    columns = {title: st.column_config.NumberColumn(title, format="%.0f%%") for title in titles.values()}
-    columns["Awaiting review"] = st.column_config.NumberColumn(
-        "Awaiting review", help="Assignments where you have not confirmed or overridden Rocky's grade yet.")
-    st.dataframe(records, hide_index=True, column_config=columns)
-    st.caption("Each cell is the grade that counts: your confirmed grade, otherwise the student's highest "
-               "Rocky score. None means not submitted. Choose an assignment above to review attempts.")
+def _remember_open(opened, assignment_id, key):
+    (opened.add if st.session_state.get(key) else opened.discard)(assignment_id)
 
 
 def _professor_grades(course, assignments):
+    """One dropdown per assignment with each student's counted grade inside.
+
+    Stays short as assignments pile up: collapsed rows are one line each, and a
+    dropdown's student list is only built while it is open.
+    """
     from homework.review_views import REVIEW_SELECTION, review_button, review_submission_dialog
     from pages.dashboards.professor import _due_sort_key
+    from components.grade_book import paginate
     rows = list(db.find("homework_submissions", {"class_id": course["_id"]}))
-    student_ids = {row["user_id"] for row in db.find("students", {"class_id": course["_id"]})}
-    ids = list(student_ids | {row["user_id"] for row in rows})
-    users = {row["_id"]: row for row in db.find("users", {"_id": {"$in": ids}})} if ids else {}
-    submitted = {row["assignment_id"] for row in rows}
-    ordered = [row for row in sorted(assignments, key=_due_sort_key) if row["_id"] in submitted]
-    titles = {str(row["_id"]): row.get("title", "Untitled") for row in ordered}
-    choice = st.selectbox("Assignment", ["overview", *titles], key=f"course_grades_assignment_{course['_id']}",
-                          format_func=lambda value: "All assignments (gradebook)" if value == "overview" else titles[value])
     if not rows:
         st.caption("No submissions yet.")
         return
-    if choice == "overview":
-        _gradebook(rows, student_ids, users, ordered)
-    else:
-        selected = [row for row in rows if str(row["assignment_id"]) == choice]
-        attempt_groups(selected, group_by="user_id", title_of=lambda attempts: _name(users.get(attempts[0]["user_id"])),
-                       key=f"course_grades_{choice}", attempt_action=lambda attempt: review_button(attempt, choice))
+    ids = list({row["user_id"] for row in rows})
+    users = {row["_id"]: row for row in db.find("users", {"_id": {"$in": ids}})}
+    by_assignment = group_attempts(rows)
+    # Newest due date first: that's usually the work being graded right now.
+    ordered = sorted((row for row in assignments if row["_id"] in by_assignment), key=_due_sort_key, reverse=True)
+    st.caption("Open an assignment to see each student's grade that counts: your confirmed grade, "
+               "otherwise their highest Rocky score.")
+    opened = st.session_state.setdefault(f"course_grades_opened_{course['_id']}", set())
+    for assignment in paginate(ordered, key=f"course_grades_page_{course['_id']}"):
+        attempts = by_assignment[assignment["_id"]]
+        assignment_id = str(assignment["_id"])
+        label = _assignment_label(assignment, group_attempts(attempts, "user_id"))
+        # The header changes as grades are confirmed, and Streamlit resets an expander
+        # whose label changes. Remember open dropdowns separately so grading keeps
+        # the professor's place instead of collapsing it.
+        open_key = f"course_grades_open_{assignment_id}_{label}"
+        is_open = assignment_id in opened
+        with st.expander(label, expanded=is_open, key=open_key, on_change=_remember_open,
+                         args=(opened, assignment_id, open_key)):
+            if is_open:
+                attempt_groups(attempts, group_by="user_id", compact=True,
+                               title_of=lambda group: _name(users.get(group[0]["user_id"])),
+                               key=f"course_grades_{assignment_id}",
+                               attempt_action=lambda attempt, aid=assignment_id: review_button(attempt, aid))
     selection = st.session_state.get(REVIEW_SELECTION)
-    if selection and selection["assignment_id"] in titles:
+    if selection and selection["assignment_id"] in {str(row["_id"]) for row in ordered}:
         review_submission_dialog(selection["submission_id"], selection["revision"])
 
 

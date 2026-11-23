@@ -29,7 +29,7 @@ def kept_summary(attempts):
     if score:
         earned, possible, confirmed = score
         source = "Confirmed" if confirmed else "Highest"
-        return kept, f"{source} {earned:g}/{possible:g} · {100 * earned / possible:.0f}%", "green" if confirmed else "yellow"
+        return kept, f"{source} {earned:g}/{possible:g} · {100 * earned / possible:.0f}%", "green" if confirmed else "blue"
     if any(row.get("grading_status") in {"ungraded", "grading", None} for row in attempts):
         return None, "Processing", "gray"
     return None, "Not graded", "gray"
@@ -66,12 +66,13 @@ def paginate(items, *, key, size=PAGE_SIZE):
 
 
 def attempt_groups(rows, *, group_by, title_of, key, attempt_action, noun="student",
-                   format_time=_utc, review_filters=True, empty="No submissions yet."):
+                   format_time=_utc, review_filters=True, empty="No submissions yet.", compact=False):
     """One expandable row per group; the header shows the counted grade.
 
     group_by:       field to group on ("user_id" for students, "assignment_id" for work)
     title_of:       attempts -> display name for the group
     attempt_action: (attempt) -> None, draws the button(s) for one attempt
+    compact:        rows with an attempts popover, for use inside another dropdown
     """
     groups = group_attempts(rows, group_by)
     if not groups:
@@ -99,15 +100,28 @@ def attempt_groups(rows, *, group_by, title_of, key, attempt_action, noun="stude
         attempts = sorted(attempts, key=lambda row: (row.get("submitted_at") is not None, row.get("submitted_at")), reverse=True)
         kept, label, color = kept_summary(attempts)
         count = f"{len(attempts)} attempt{'s' if len(attempts) != 1 else ''}"
-        with st.expander(f"**{name}** · {count} · :{color}-badge[{label}]",
-                         key=f"{key}_group_{attempts[0].get(group_by)}"):
-            for number, attempt in enumerate(attempts):
-                with st.container(horizontal=True, vertical_alignment="center", gap="small"):
-                    st.caption(f"Attempt {len(attempts) - number} · {format_time(attempt.get('submitted_at'))}")
-                    st.badge(grading_label(attempt), color=status_color(grading_label(attempt)))
-                    if kept is not None and attempt.get("_id") == kept.get("_id"):
-                        st.badge("Counts", icon=":material/star:", color="green",
-                                 help="This attempt counts toward the grade: the professor's decision, "
-                                      "otherwise the highest Rocky score.")
-                    st.space("stretch")
-                    attempt_action(attempt)
+        group_key = f"{key}_group_{attempts[0].get(group_by)}"
+        if compact:
+            # Inside another dropdown (expanders can't nest): one row, attempts in a popover.
+            with st.container(border=True, horizontal=True, vertical_alignment="center", gap="small"):
+                st.markdown(f"**{name}** · {count}")
+                st.badge(label, color=color)
+                st.space("stretch")
+                with st.popover(f"Attempts ({len(attempts)})", icon=":material/history:", key=group_key):
+                    _attempt_rows(attempts, kept, format_time, attempt_action)
+        else:
+            with st.expander(f"**{name}** · {count} · :{color}-badge[{label}]", key=group_key):
+                _attempt_rows(attempts, kept, format_time, attempt_action)
+
+
+def _attempt_rows(attempts, kept, format_time, attempt_action):
+    for number, attempt in enumerate(attempts):
+        with st.container(horizontal=True, vertical_alignment="center", gap="small"):
+            st.caption(f"Attempt {len(attempts) - number} · {format_time(attempt.get('submitted_at'))}")
+            st.badge(grading_label(attempt), color=status_color(grading_label(attempt)))
+            if kept is not None and attempt.get("_id") == kept.get("_id"):
+                st.badge("Counts", icon=":material/star:", color="green",
+                         help="This attempt counts toward the grade: the professor's decision, "
+                              "otherwise the highest Rocky score.")
+            st.space("stretch")
+            attempt_action(attempt)
