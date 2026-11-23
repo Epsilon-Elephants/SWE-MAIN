@@ -5,9 +5,10 @@ from pages.dashboards.professor import _load_assignment_context, render_assignme
 from pymongo.errors import PyMongoError
 
 user = require_role("professor")
-st.title("Assignments")
-if st.button("Create assignment", type="primary", icon=":material/add:"):
-    st.switch_page("app_pages/create_assignment.py")
+with st.container(horizontal=True, vertical_alignment="center"):
+    st.title("Assignments")
+    if st.button("Create assignment", type="primary", icon=":material/add:"):
+        st.switch_page("app_pages/create_assignment.py")
 try:
     assignments = list_assignments_for_professor(user["id"])
     classes, summaries = _load_assignment_context(user["id"], assignments)

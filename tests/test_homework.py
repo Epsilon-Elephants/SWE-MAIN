@@ -14,6 +14,7 @@ from db.DataBase import db
 from db.assignments import create_assignment, update_problem
 from db.homework_submissions import get_homework_for_student, submit_homework
 from homework.schema import build_grading_payload, normalize_problem, normalize_problems
+from problem_dialog import open_problems
 
 pytestmark = pytest.mark.regression
 
@@ -203,7 +204,7 @@ def test_student_flow_from_dashboard_to_submission(homework):
         assert len(history) == 1
         next(b for b in app.button if b.label == "Back to homework").click().run()
         assert not app.exception
-        assert any("Processing" in c.value for c in app.caption)
+        assert any("Processing" in c.value for c in [*app.caption, *app.markdown])
         app.switch_page("app_pages/homework.py").run()
         next(b for b in app.button if b.label == "Back to dashboard").click().run()
         assert not app.exception
@@ -251,6 +252,7 @@ show_assignment_editor("{homework['_id']}", "{professor_id}")
     ) as update, patch("pages.assignment_editor.list_submissions_for_assignment", return_value=[]):
         app.run()
         assert not app.exception
+        open_problems(app, str(homework["_id"]))
         app.number_input[0].set_value(3.0)
         next(w for w in app.text_input if w.label == "Topic").set_value("Logic")
         next(w for w in app.text_area if w.label == "Reference answer (private)").set_value("Both true")

@@ -12,11 +12,11 @@ def login_page():
         st.title("Better questions.\nDeeper understanding.")
         st.write("A shared workspace for the study of philosophy and logic.")
         students, professors = st.columns(2)
-        with students.container(border=True):
-            st.subheader("For students")
+        with students.container(border=True, height="stretch"):
+            st.markdown("#### :material/edit_note: For students")
             st.write("Complete assignments, see tentative and confirmed scores, and get topic-based study suggestions.")
-        with professors.container(border=True):
-            st.subheader("For professors")
+        with professors.container(border=True, height="stretch"):
+            st.markdown("#### :material/co_present: For professors")
             st.write("Create course assignments, review Rocky's feedback, and confirm or adjust scores.")
         with st.expander("How it works"):
             st.markdown(

@@ -181,7 +181,9 @@ professorDash().load_dash()
     captions = [row.value for row in app.caption]
     assert "**Average grade: 40.0%**" in captions
     assert "**Average grade: 75.0%**" in captions
-    assert captions.count("Logic · 1 of 1 student(s) below 70%") == 2
+    # Course cards list topics in full; compact assignment rows summarize them on one line.
+    assert captions.count("Logic · 1 of 1 student(s) below 70%") == 1
+    assert ":material/warning: Struggling: Logic" in captions
 
 
 @pytest.mark.parametrize("summary,expected", [

@@ -3,6 +3,10 @@
 [browser]
 gatherUsageStats = false
 
+[client]
+# Hide developer-only toolbar items (Deploy, rerun prompts) for presentations.
+toolbarMode = "minimal"
+
 [theme]
 showWidgetBorder = true
 showSidebarBorder = false

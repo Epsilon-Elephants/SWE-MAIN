@@ -6,7 +6,7 @@ from pages.dashboards.professor import render_create_assignment
 user = require_role("professor")
 st.caption("COURSEWORK / AUTHORING")
 st.title("Create assignment")
-st.caption("Start with a question, then add problems and private grading criteria in the editor.")
+st.caption("Fill in the details, then use Edit problems to write as many questions as you need.")
 if st.button("Back to overview", icon=":material/arrow_back:"):
     st.switch_page("app_pages/overview.py")
 render_create_assignment(user["id"])

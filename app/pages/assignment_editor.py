@@ -1,9 +1,10 @@
 import logging
 
 import streamlit as st
+from components.course_cards import status_color
 from pymongo.errors import PyMongoError
 
-from components.problem_editor import grading_fields, problem_editor
+from components.problem_manager import problem_manager
 from db.assignments import (
     add_problem,
     delete_assignment,
@@ -17,7 +18,7 @@ from db.homework_submissions import list_submissions_for_assignment
 from homework.results import grading_label
 from homework.review_views import REVIEW_SELECTION, review_submission_dialog
 from components.compact_list import compact_list, close_compact_list
-from homework.schema import authored_problem, authored_problems
+from homework.schema import authored_problems
 from components.notifications import show_notices, show_success, observe_grading
 
 logger = logging.getLogger(__name__)
@@ -31,6 +32,12 @@ def _student_name(user):
 
 def _format_timestamp(value):
     return value.strftime("%b %d, %Y %H:%M UTC") if hasattr(value, "strftime") else ""
+
+
+def _require(result, message):
+    if not result:
+        raise ValueError(message)
+    return result
 
 
 def _show_error(error):
@@ -73,7 +80,8 @@ def _render_submissions(assignment_id, professor_id):
 def show_assignment_editor(assignment_id, professor_id: str):
     show_notices()
     return_page = st.session_state.get("professor_assignment_return_page", "app_pages/assignments.py")
-    if st.button("Back to course" if return_page == "app_pages/course.py" else "Back to assignments", key="back_to_assignments"):
+    if st.button("Back to course" if return_page == "app_pages/course.py" else "Back to assignments",
+                 key="back_to_assignments", icon=":material/arrow_back:", type="tertiary"):
         st.session_state.pop("selected_assignment_id", None)
         st.switch_page(return_page)
 
@@ -89,8 +97,9 @@ def show_assignment_editor(assignment_id, professor_id: str):
 
     assignment_key = str(assignment_id)
     current_status = assignment.get("status", "draft")
-    st.title(assignment.get("title", "Assignment"))
-    st.caption(f"Status: {current_status.capitalize()}")
+    with st.container(horizontal=True, vertical_alignment="center"):
+        st.title(assignment.get("title", "Assignment"))
+        st.badge(current_status.capitalize(), color=status_color(current_status))
     if message := st.session_state.pop("professor_assignment_success", None):
         show_success(message)
     is_draft = assignment.get("status", "draft") == "draft"
@@ -103,18 +112,20 @@ def show_assignment_editor(assignment_id, professor_id: str):
             description = st.text_area(
                 "Description", value=assignment.get("description", "")
             )
-            posted = st.date_input(
+            posted_column, due_column = st.columns(2)
+            posted = posted_column.date_input(
                 "Posted date", value=assignment.get("posted") or "today",
                 help="Students can see this assignment starting on this date (UTC).",
             )
-            due_date = st.date_input(
+            due_date = due_column.date_input(
                 "Due date", value=assignment.get("due_date"),
                 help="Deadline: midnight UTC at the start of the selected date. Late submissions are accepted.",
             )
-            save_assignment = st.form_submit_button(
-                "Post homework" if is_draft else "Save assignment", type="primary",
-            )
-            finish_later = st.form_submit_button("Finish later")
+            with st.container(horizontal=True):
+                save_assignment = st.form_submit_button(
+                    "Post homework" if is_draft else "Save assignment", type="primary", icon=":material/save:",
+                )
+                finish_later = st.form_submit_button("Finish later", icon=":material/schedule:")
 
         if save_assignment or finish_later:
             try:
@@ -181,83 +192,22 @@ def show_assignment_editor(assignment_id, professor_id: str):
 
 
     with problems_tab:
-        problems = assignment.get("problems", [])
-        problem_options = [problem["problem_id"] for problem in problems] + ["new"]
-        labels = {problem["problem_id"]: f"Question {number} · {problem['content'][:70]}" for number, problem in enumerate(problems, 1)}
-        selected_problem = st.selectbox("Question", problem_options, format_func=lambda value: labels.get(value, "+ Add a question"), key=f"selected_problem_{assignment_key}")
-
-        for number, problem in enumerate(assignment.get("problems", []), start=1):
-            problem_id = problem.get("problem_id")
-            if not problem_id or problem_id != selected_problem:
-                continue
-
-            with st.form(f"problem_{assignment_key}_{problem_id}"):
-                content = problem_editor(
-                    f"Problem {number}",
-                    key=f"content_{assignment_key}_{problem_id}",
-                    initial_content=problem.get("content", ""),
-                )
-                problem_fields = grading_fields(
-                    content,
-                    problem,
-                    key_prefix=f"problem_{assignment_key}_{problem_id}",
-                )
-                save_problem = st.form_submit_button("Save problem")
-                remove_problem = st.form_submit_button(
-                    "Remove problem", disabled=len(assignment.get("problems", [])) <= 1,
-                )
-
-            try:
-                if save_problem:
-                    saved = update_problem(
-                        assignment_id,
-                        professor_id,
-                        problem_id,
-                        authored_problem(problem_fields, problem_id=problem_id),
-                    )
-                    if not saved:
-                        raise ValueError("Problem could not be saved. Reload and try again.")
-                    st.session_state.professor_assignment_success = "Problem saved."
-                    st.rerun()
-                if remove_problem:
-                    if not delete_problem(assignment_id, professor_id, problem_id):
-                        raise ValueError("Problem could not be removed. Reload and try again.")
-                    st.session_state.professor_assignment_success = "Problem removed."
-                    st.rerun()
-            except (ValueError, RuntimeError, PyMongoError) as error:
-                _show_error(error)
-
-        if selected_problem == "new":
-            new_problem_prefix = f"new_problem_{assignment_key}"
-            new_problem_keys = (
-                f"new_content_{assignment_key}",
-                f"{new_problem_prefix}_points",
-                f"{new_problem_prefix}_topic",
-                f"{new_problem_prefix}_reference_answer",
-                f"{new_problem_prefix}_grading_guidance",
-            )
-            if st.session_state.pop(f"{new_problem_prefix}_clear", False):
-                for key in new_problem_keys:
-                    st.session_state.pop(key, None)
-
-            with st.form(f"new_problem_{assignment_key}"):
-                new_content = problem_editor(
-                    "New problem", key=f"new_content_{assignment_key}",
-                )
-                new_fields = grading_fields(
-                    new_content, key_prefix=new_problem_prefix,
-                )
-                add_submitted = st.form_submit_button("Add problem")
-            if add_submitted:
-                try:
-                    if not add_problem(assignment_id, professor_id, authored_problem(new_fields)):
-                        raise ValueError("Problem could not be added. Reload and try again.")
-                    st.session_state[f"{new_problem_prefix}_clear"] = True
-                    st.session_state.professor_assignment_success = "Problem added."
-                    st.rerun()
-                except (ValueError, RuntimeError, PyMongoError) as error:
-                    _show_error(error)
-
+        if is_draft:
+            st.caption("Students see these questions once the assignment is posted.")
+        problem_manager(
+            assignment.get("problems", []),
+            key=assignment_key,
+            save=lambda problem_id, problem: _require(
+                update_problem(assignment_id, professor_id, problem_id, problem),
+                "Problem could not be saved. Reload and try again."),
+            remove=lambda problem_id: _require(
+                delete_problem(assignment_id, professor_id, problem_id),
+                "Problem could not be removed. Reload and try again."),
+            add=lambda problem: _require(
+                add_problem(assignment_id, professor_id, problem),
+                "Problem could not be added. Reload and try again."),
+            min_problems=1,
+        )
 
     with submissions_tab:
         _render_submissions(assignment_id, professor_id)

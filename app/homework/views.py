@@ -112,7 +112,7 @@ def show_homework_list():
                 st.switch_page("app_pages/homework_assignment.py")
             assignment_row(assignment["title"], classes.get(assignment["class_id"], "Course") + f" · Due {format_date(assignment.get('due_date'), tz)}",
                            status, key=f"homework_open_{assignment['_id']}", open_assignment=open_assignment)
-        compact_list(ordered, render_assignment, title="More homework", key="homework_list")
+        compact_list(ordered, render_assignment, title="More homework", key="homework_list", columns=2)
     except ERRORS as error:
         if isinstance(error, ValueError):
             st.error(str(error))

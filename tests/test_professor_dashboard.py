@@ -11,13 +11,14 @@ from streamlit.testing.v1 import AppTest
 sys.path.append(str(Path(__file__).resolve().parents[1] / "app"))
 
 from db.DataBase import db
+from problem_dialog import add_problem, close_problems, open_problems
 
 pytestmark = pytest.mark.regression
 
 
 @pytest.mark.parametrize("title,problem,message", [
     ("  ", "Solve this", "Assignment title is required."),
-    ("Homework", "  ", "At least one problem is required."),
+    ("Homework", None, "Add at least one question with Edit problems before posting."),
 ])
 def test_create_form_rejects_blank_required_content(title, problem, message):
     app = AppTest.from_string(f'''
@@ -28,14 +29,15 @@ render_create_assignment("{ObjectId()}")
         "pages.dashboards.professor.create_assignment",
     ) as create:
         app.run()
-        app.text_input[0].set_value(title)
-        app.text_area(key="create_assignment_first_problem").set_value(problem)
+        app.text_input(key="create_assignment_title").set_value(title)
+        if problem:
+            close_problems(add_problem(open_problems(app, "create_assignment"), "create_assignment", problem), "create_assignment")
         next(button for button in app.button if button.label == "Post homework").click().run()
         assert not app.exception
         create.assert_not_called()
         assert app.error[0].value == message
-        assert app.text_input[0].value == title
-        assert app.text_area(key="create_assignment_first_problem").value == problem
+        assert app.text_input(key="create_assignment_title").value == title
+        assert len(app.session_state["create_assignment_problems"]) == (1 if problem else 0)
 
 
 class TestProfessorDashboard(unittest.TestCase):
@@ -55,7 +57,9 @@ show_assignment_editor("{assignment_id}", "{professor_id}")
         ) as update, patch("pages.assignment_editor.list_submissions_for_assignment", return_value=[]):
             app.run()
             self.assertFalse(app.exception)
+            open_problems(app, assignment_id)
             self.assertTrue(next(button for button in app.button if button.label == "Remove problem").disabled)
+            close_problems(app, assignment_id)
             self.assertFalse(any(widget.label == "Status" for widget in app.selectbox))
             app.date_input[1].set_value(date(2026, 11, 10))
             next(button for button in app.button if button.label == "Post homework").click().run()
@@ -77,10 +81,11 @@ render_create_assignment("{professor_id}")
         ) as create:
             app.run()
             self.assertFalse(app.exception)
-            app.text_input[0].set_value("Homework")
-            app.text_area(key="create_assignment_first_problem").set_value("Solve this")
-            next(field for field in app.text_input if field.label == "Topic").set_value("Logic")
-            next(field for field in app.text_area if field.label == "Reference answer (private)").set_value("Solution")
+            app.text_input(key="create_assignment_title").set_value("Homework")
+            open_problems(app, "create_assignment")
+            add_problem(app, "create_assignment", "Solve this")
+            add_problem(app, "create_assignment", "Now prove it", topic="Proofs", reference="Proof", points=3)
+            close_problems(app, "create_assignment")
             app.date_input[0].set_value(date(2026, 11, 1))
             app.date_input[1].set_value(date(2026, 11, 8))
             next(button for button in app.button if button.label == "Post homework").click().run()
@@ -93,6 +98,10 @@ render_create_assignment("{professor_id}")
             assert create.call_args.kwargs["status"] == "published"
             assert create.call_args.kwargs["problems"][0]["reference_answer"] == "Solution"
             assert create.call_args.kwargs["problems"][0]["grading_guidance"] == ""
+            # Multi-question assignments keep every question, in order.
+            problems = create.call_args.kwargs["problems"]
+            assert [row["content"] for row in problems] == ["Solve this", "Now prove it"]
+            assert problems[1]["points"] == 3.0 and problems[1]["topic"] == "Proofs"
 
     def test_creation_rejects_invalid_date_order_and_preserves_input(self):
         app = AppTest.from_string(f'''
@@ -134,7 +143,7 @@ professorDash().load_dash()
         columns = [column for column in app.get("column") if column.subheader]
         self.assertEqual(columns[0].subheader[0].value, "Courses")
         self.assertEqual(columns[-1].subheader[0].value, "To do")
-        self.assertIn("Calculus", [e.value for e in app.subheader])
+        self.assertIn("##### Calculus", [e.value for e in app.markdown])
         self.assertIn("Ongoing", [button.label for button in app.button])
         self.assertNotIn("Upcoming", [button.label for button in app.button])
         self.assertNotIn("Finished", [button.label for button in app.button])

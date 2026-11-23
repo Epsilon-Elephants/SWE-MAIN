@@ -51,11 +51,12 @@ def _render_summary(assignments, now=None):
     )
     scores = [row["score_percentage"] for row in assignments if row.get("score_percentage") is not None]
     columns = st.columns(4)
-    columns[0].metric("To do", len(pending))
-    columns[1].metric("Due in 7 days", due_soon)
-    columns[2].metric("Submitted", len(assignments) - len(pending))
+    columns[0].metric("To do", len(pending), border=True)
+    columns[1].metric("Due in 7 days", due_soon, border=True)
+    columns[2].metric("Submitted", len(assignments) - len(pending), border=True)
     columns[3].metric("Average score", f"{sum(scores) / len(scores):.0f}%" if scores else "—",
-                      help="Average of each assignment's latest attempt. Includes tentative Rocky scores awaiting professor confirmation.")
+                      help="Average of each assignment's latest attempt. Includes tentative Rocky scores awaiting professor confirmation.",
+                      border=True)
 
 
 def _course_detail(class_id, assignments):
@@ -136,8 +137,14 @@ def rocky_dialog() -> None:
 class studentDash(Dashboard):
     def load_dash(self):
         user = st.session_state.get("user") or {}
-        st.title("Dashboard")
-        st.caption(f"Welcome back, {user.get('first_name') or 'Student'}")
+        with st.container(horizontal=True, vertical_alignment="bottom"):
+            with st.container(gap="xxsmall"):
+                st.title("Dashboard")
+                st.caption(f"Welcome back, {user.get('first_name') or 'Student'}")
+            if st.button("Ask Rocky", key="student_rocky_button", icon=":material/chat:"):
+                rocky_dialog()
+            if st.button("All assignments", key="student_filter_Homework", icon=":material/assignment:", type="primary"):
+                st.switch_page("app_pages/homework.py")
         try:
             overview = load_student_overview(user.get("id"))
         except (ValueError, RuntimeError, PyMongoError):
@@ -145,7 +152,7 @@ class studentDash(Dashboard):
             st.error("Could not load your overview. Please try again.")
         else:
             _render_summary(overview["assignments"])
-            courses, work = st.columns([3, 1], gap="large")
+            courses, work = st.columns([2, 1], gap="large")
             with courses:
                 st.subheader("Courses")
                 if not overview["classes"]:
@@ -156,36 +163,34 @@ class studentDash(Dashboard):
                     for row in overview["classes"] if row.get("_id")
                 ], key="student_courses")
             with work:
-                st.subheader("To do")
-                tz = resolve_timezone(getattr(st.context, "timezone", None))
+                st.subheader("Your work")
                 pending = sorted((row for row in overview["assignments"] if not row["submitted"]),
                                  key=lambda row: due_sort_key(row.get("due_date")))
-                compact_list(pending, _render_coursework, title="More coursework", key="student_coursework")
-                if not pending:
-                    st.info("You have no unsubmitted coursework right now.")
                 submitted = sorted(
                     (row for row in overview["assignments"] if row["submitted"]),
                     key=lambda row: _as_utc(row["submitted_at"]) if row.get("submitted_at") else datetime.min.replace(tzinfo=timezone.utc),
                     reverse=True,
                 )
-                if submitted:
-                    st.subheader("Submitted")
+                # Tabs keep both lists one click apart instead of stacking them down the page.
+                todo_tab, submitted_tab = st.tabs([f"To do ({len(pending)})", f"Submitted ({len(submitted)})"])
+                with todo_tab:
+                    compact_list(pending, _render_coursework, title="More coursework", key="student_coursework")
+                    if not pending:
+                        st.info("You have no unsubmitted coursework right now.")
+                with submitted_tab:
                     compact_list(submitted, _render_submitted, title="More submitted work", key="student_submitted")
+                    if not submitted:
+                        st.caption("Work you submit will appear here.")
             if recommendations := overview.get("recommendations"):
-                with st.expander("Study plan · What to practice next"):
-                    compact_list(recommendations, _render_recommendation, title="More topic recommendations", key="student_study")
-        with st.container(horizontal=True):
-            if st.button("View all assignments", key="student_filter_Homework", icon=":material/assignment:"):
-                st.switch_page("app_pages/homework.py")
-            if st.button("Ask Rocky", key="student_rocky_button", icon=":material/chat:"):
-                rocky_dialog()
-        with st.expander("Recently viewed"):
+                with st.expander("Study plan · What to practice next", icon=":material/psychology:"):
+                    compact_list(recommendations, _render_recommendation, title="More topic recommendations", key="student_study", columns=2)
+        recent, resources = st.columns(2)
+        with recent.expander("Recently viewed", icon=":material/history:"):
             self.render_recently_visited()
-        with st.expander("Find learning resources", icon=":material/search:"):
+        with resources.expander("Find learning resources", icon=":material/search:"):
             self.render_search()
 
     def render_recently_visited(self):
-        st.subheader("Recently visited")
         items = [item for item in get_recent() if item.get("kind") in OPENERS]
         if not items:
             st.caption("Nothing here yet. Open an assignment!")

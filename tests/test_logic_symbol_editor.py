@@ -3,6 +3,7 @@ from unittest.mock import patch
 
 from bson import ObjectId
 from streamlit.testing.v1 import AppTest
+from problem_dialog import open_problems
 
 from components.logic_symbol_editor import (
     LOGIC_SYMBOL_CATEGORIES,
@@ -148,6 +149,7 @@ show_assignment_editor("{assignment_id}", "{professor_id}")
         ):
             app.run()
             self.assertFalse(app.exception)
+            open_problems(app, assignment_id)
             app.selectbox(key=f"selected_problem_{assignment_id}").set_value("new").run()
             app.text_area(key=content_key).set_value("New problem")
             app.button(key=f"{content_key}__logic_symbol_2").click().run()

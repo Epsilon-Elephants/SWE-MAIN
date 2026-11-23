@@ -53,6 +53,36 @@ def student_course_scores(course_id):
         st.caption("Course scores are temporarily unavailable. Try again shortly.")
 
 
+def _course_home(course, assignments, professor):
+    """At-a-glance course summary: counts on top, the next few deadlines below."""
+    from datetime import datetime, timezone
+    from pages.dashboards.professor import assignment_state, _due_sort_key, _format_date, STATE_LABELS
+    from components.course_cards import status_color
+    now = datetime.now(timezone.utc)
+    states = [assignment_state(row, now) for row in assignments]
+    with st.container(horizontal=True):
+        st.metric("Assignments", len(assignments), border=True)
+        st.metric("Open", states.count("open"), border=True)
+        st.metric("Past due", states.count("past_due"), border=True)
+        if professor:
+            st.metric("Drafts", states.count("draft"), border=True)
+            try:
+                students = db._get_collection("students").count_documents({"class_id": course["_id"]})
+            except (RuntimeError, PyMongoError):
+                students = None
+            st.metric("Students", "—" if students is None else students, border=True)
+    st.subheader("Coming up")
+    upcoming = sorted((row for row, state in zip(assignments, states) if state in {"open", "scheduled"}), key=_due_sort_key)[:5]
+    if not upcoming:
+        st.caption("Nothing due soon. Open Assignments to see everything in this course.")
+    for row in upcoming:
+        state = assignment_state(row, now)
+        with st.container(horizontal=True, vertical_alignment="center", gap="small"):
+            st.badge(STATE_LABELS[state], color=status_color(STATE_LABELS[state]))
+            st.markdown(f"**{row.get('title', 'Untitled')}**")
+            st.caption(f"Due {_format_date(row.get('due_date'))}")
+
+
 def show_courses(user):
     st.title("Courses")
     try:
@@ -95,7 +125,8 @@ def show_course(user):
         if not professor:
             student_course_scores(course_id)
         sections = ["Home", "Assignments", "Grades"] + (["People"] if professor else [])
-        section = st.segmented_control("Course navigation", sections, default="Assignments", key=f"course_section_{course_id}") or "Assignments"
+        section = st.segmented_control("Course navigation", sections, default="Assignments", key=f"course_section_{course_id}",
+                                       label_visibility="collapsed") or "Assignments"
         if section == "People":
             from pages.dashboards.professor_classes import _manage_class
             st.subheader("People")
@@ -148,12 +179,10 @@ def show_course(user):
                 assignment_row((f"{name} · " if professor else "") + row["assignment_snapshot"]["title"],
                                row["submitted_at"].strftime("%b %d, %Y"), grading_label(row),
                                key=f"course_grade_{row['_id']}", open_assignment=open_grade)
-            compact_list(rows, grade_row, title="More grades", key=f"course_grades_{course_id}")
+            compact_list(rows, grade_row, title="More grades", key=f"course_grades_{course_id}", columns=2)
             return
         if section == "Home":
-            st.subheader("Course home")
-            st.caption(f"{len(assignments)} assignment(s) available in this course.")
-            st.write("Use Assignments to open coursework, or Grades to review submission results.")
+            _course_home(course, assignments, professor)
             return
         if professor:
             from pages.dashboards.professor import render_assignment_groups, _load_assignment_context
@@ -170,6 +199,6 @@ def show_course(user):
                 due = row.get("due_date")
                 assignment_row(row["title"], "Due " + (due.strftime("%b %d, %Y") if due else "not set"), "Assignment",
                                key=f"course_assignment_{row['_id']}", open_assignment=lambda: open_homework(row["_id"], return_page="app_pages/course.py"))
-            compact_list(filtered, render, title="More assignments", key=f"course_assignments_{course_id}")
+            compact_list(filtered, render, title="More assignments", key=f"course_assignments_{course_id}", columns=2)
     except (ValueError, RuntimeError, PyMongoError):
         st.error("Could not load this course. Check your enrollment or teaching access and try again.")

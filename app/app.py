@@ -1,8 +1,9 @@
 import streamlit as st
 from components.notifications import show_notices
 
-st.set_page_config(page_title="Philosophy classroom", page_icon=":material/school:", layout="wide")
 st.session_state.setdefault("user", None)
+st.set_page_config(page_title="Philosophy classroom", page_icon=":material/school:", layout="wide",
+                   initial_sidebar_state="auto" if st.session_state.user else "collapsed")
 show_notices()
 user = st.session_state.user or {}
 role = user.get("permissions")
@@ -11,9 +12,10 @@ if role in {"student", "professor"}:
 
     start_grading_worker()
 
-with st.sidebar:
-    st.markdown("### Philosophy classroom")
-    if user:
+# Signed-out visitors see only the login page, so leave the sidebar empty (and hidden).
+if user:
+    with st.sidebar:
+        st.markdown("### :material/school: Philosophy classroom")
         name = " ".join(filter(None, [user.get("first_name"), user.get("last_name")]))
         st.caption((name or user.get("email", "Account")) + (f" · {role.capitalize()}" if role else ""))
 

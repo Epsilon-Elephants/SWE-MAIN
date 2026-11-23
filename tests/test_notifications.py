@@ -4,6 +4,7 @@ from datetime import date
 from unittest.mock import MagicMock, patch
 
 import pytest
+from problem_dialog import open_problems
 from bson import ObjectId
 from streamlit.testing.v1 import AppTest
 
@@ -116,10 +117,11 @@ show_assignment_editor("{assignment}", "{professor}")
         "pages.assignment_editor.list_submissions_for_assignment", return_value=[],
     ), patch("pages.assignment_editor.update_problem", return_value=saved):
         app.run()
+        open_problems(app, assignment)
         next(button for button in app.button if button.label == "Save problem").click().run()
     assert not app.exception
     toasts = [toast.value for toast in app.get("toast")]
-    assert ("Problem saved." in toasts) is saved
+    assert ("Question 1 saved." in toasts) is saved
     if not saved:
         assert any("could not be saved" in message for message in toasts)
         assert not app.success

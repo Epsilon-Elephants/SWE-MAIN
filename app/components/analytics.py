@@ -17,28 +17,43 @@ def professor_courses(professor_id, courses):
     return [{**course, "insights": summaries.get(course["_id"])} for course in courses]
 
 
-def professor_insights(summary, *, course=False):
+def _topic_line(topic):
+    return f"{topic['topic']} · {topic['struggling_students']} of {topic['students']} student(s) below 70%"
+
+
+def professor_insights(summary, *, course=False, compact=False):
+    """Grade and topic insights; ``compact`` keeps list rows to one or two lines."""
     if summary is None:
-        st.caption("Grade and topic insights are temporarily unavailable.")
+        st.caption("Insights are temporarily unavailable.")
         return
     recorded = course and summary.get("recorded_average") is not None
     average = summary.get("recorded_average") if recorded else summary.get("average")
-    st.caption(f"**Average grade: {average:.1f}%**" if average is not None else "Average grade: Not graded yet")
-    if average is not None:
+    topics = summary.get("struggling_topics", [])
+    if average is None:
+        if compact:
+            return  # Nothing graded yet: the row's status already says enough.
+        st.caption("Average grade: Not graded yet")
+    else:
         count = summary["recorded_students"] if recorded else summary["graded_students"]
         source = "professor-recorded course grades" if recorded else "assignment grades per student (includes tentative Rocky scores)"
-        st.caption(f"{count} graded student(s) · {source}")
-    topics = summary.get("struggling_topics", [])
+        st.caption(f"**Average grade: {average:.1f}%**", help=f"{count} graded student(s) · {source}")
     if topics:
+        if compact:
+            st.caption(":material/warning: Struggling: " + ", ".join(topic["topic"] for topic in topics[:3])
+                       + (f" +{len(topics) - 3}" if len(topics) > 3 else ""),
+                       help="\n".join(_topic_line(topic) for topic in topics))
+            return
         st.markdown("**Topics students are struggling with**")
         for topic in topics[:3]:
-            st.caption(f"{topic['topic']} · {topic['struggling_students']} of {topic['students']} student(s) below 70%")
+            st.caption(_topic_line(topic))
         if len(topics) > 3:
             with st.expander(f"{len(topics) - 3} more topics"):
                 for topic in topics[3:]:
-                    st.caption(f"{topic['topic']} · {topic['struggling_students']} of {topic['students']} student(s) below 70%")
+                    st.caption(_topic_line(topic))
+    elif compact:
+        return
     elif not summary.get("graded_students"):
-        st.caption("Topic insights will appear after Rocky grades student work.")
+        st.caption("Topic insights appear once Rocky grades student work.")
     elif not summary.get("has_topics"):
         st.caption("No topic labels on graded questions yet.")
     else:
@@ -46,11 +61,13 @@ def professor_insights(summary, *, course=False):
 
 
 def student_insights(summary):
-    with st.container(border=True):
-        st.markdown("**Your focus topics**")
-        if not summary or not summary.get("graded_students"):
-            st.caption("Submit homework and let Rocky grade it to see what to practice here.")
-        elif not summary.get("has_topics"):
+    if not summary or not summary.get("graded_students"):
+        # One quiet line instead of a heading plus a paragraph on every empty card.
+        st.caption(":material/target: Submit homework to see your focus topics here.")
+        return
+    with st.container(gap="xxsmall"):
+        st.markdown("**:material/target: Your focus topics**")
+        if not summary.get("has_topics"):
             st.caption("Your graded questions do not have topic labels yet.")
         elif topics := summary.get("struggling_topics"):
             for topic in topics:

@@ -106,7 +106,8 @@ def test_overview_metrics_and_card_details():
     assert app.button(key=f"professor_courses_{class_id}")
     captions = [caption.value for caption in app.caption]
     assert any("Logic · Due" in c and "1 question" in c and "3 submitted" in c for c in captions)
-    assert "Past due" in captions
+    # Row status is shown as a badge (a Markdown color-badge directive).
+    assert ":red-badge[Past due]" in [row.value for row in app.markdown]
 
 
 def editor_app(assignment_id, professor_id):

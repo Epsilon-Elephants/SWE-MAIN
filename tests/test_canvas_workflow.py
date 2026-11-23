@@ -12,6 +12,7 @@ from db.DataBase import db
 from db.assignments import add_problem, create_assignment, set_assignment_status, update_problem
 from homework.schema import authored_problem, normalize_problem
 from courses.views import authorized_course
+from problem_dialog import close_problems, fill_new_problem, open_problems
 from rocky.grading import build_grading_prompt, grade_with_rocky
 
 pytestmark = [pytest.mark.unit, pytest.mark.regression]
@@ -60,19 +61,25 @@ def test_empty_optional_rubric_is_saved_and_rocky_can_award_partial_credit():
 
 
 def test_create_form_requires_reference_and_preserves_inputs():
+    key = "create_assignment"
     with patch.object(db, "find", return_value=[{"_id": ObjectId(), "name": "Logic"}]), patch(
         "pages.dashboards.professor.create_assignment",
     ) as create, patch("streamlit.switch_page"):
         app = AppTest.from_string(f'from pages.dashboards.professor import render_create_assignment\nrender_create_assignment("{ObjectId()}")').run()
-        app.text_input[0].set_value("Homework")
-        app.text_area(key="create_assignment_first_problem").set_value("Explain conjunction.")
-        next(widget for widget in app.text_input if widget.label == "Topic").set_value("Logic")
-        next(button for button in app.button if button.label == "Post homework").click().run()
+        app.text_input(key=f"{key}_title").set_value("Homework")
+        open_problems(app, key)
+        fill_new_problem(app, key, "Explain conjunction.", reference="")
+        next(button for button in app.button if button.label == "Add problem").click().run()
         assert not app.exception
         assert app.error[0].value == "Professor reference answer is required."
-        create.assert_not_called()
-        assert app.text_area(key="create_assignment_first_problem").value == "Explain conjunction."
-        next(widget for widget in app.text_area if widget.label == "Reference answer (private)").set_value("Both true.")
+        assert app.session_state[f"{key}_problems"] == []
+        assert app.text_area(key=f"new_content_{key}").value == "Explain conjunction."
+        app.text_area(key=f"new_problem_{key}_reference_answer").set_value("Both true.")
+        next(button for button in app.button if button.label == "Add problem").click().run()
+        assert not app.exception
+        assert len(app.session_state[f"{key}_problems"]) == 1
+        close_problems(app, key)
+        assert app.text_input(key=f"{key}_title").value == "Homework"
         next(button for button in app.button if button.label == "Post homework").click().run()
         assert not app.exception
         create.assert_called_once()
@@ -88,6 +95,9 @@ def test_question_editor_shows_one_question_and_rejects_empty_topic():
     ), patch("pages.assignment_editor.update_problem") as update:
         app = AppTest.from_string(f'from pages.assignment_editor import show_assignment_editor\nshow_assignment_editor("{aid}", "{pid}")').run()
         assert not app.exception
+        # Questions are edited in the "Edit problems" dialog, one at a time.
+        assert not any(widget.label == "Reference answer (private)" for widget in app.text_area)
+        open_problems(app, str(aid))
         assert len([widget for widget in app.text_area if widget.label == "Reference answer (private)"]) == 1
         app.selectbox(key=f"selected_problem_{aid}").select("q2").run()
         assert not app.exception

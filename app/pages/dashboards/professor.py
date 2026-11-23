@@ -4,14 +4,13 @@ from datetime import date, datetime, time, timezone
 import streamlit as st
 from pymongo.errors import PyMongoError
 
-from components.problem_editor import grading_fields, problem_editor
+from components.problem_manager import problem_manager
 from db.DataBase import db
 from db.assignments import create_assignment, list_assignments_for_professor
 from db.homework_submissions import summarize_submissions
 from pages.dashboards.dashboard import Dashboard
 from components.compact_list import compact_list, close_compact_list
 from components.course_cards import course_cards, assignment_row
-from homework.schema import authored_problem
 from components.analytics import professor_insights, professor_courses
 from components.notifications import show_notices, show_success
 from db.analytics import load_professor_analytics
@@ -95,6 +94,16 @@ def _load_assignment_context(professor_id, assignments):
     return class_names, completions
 
 
+CREATE_PROBLEMS = "create_assignment_problems"
+
+
+def _clear_create_form():
+    """Start the next new assignment from a blank page."""
+    for key in list(st.session_state):
+        if isinstance(key, str) and "create_assignment" in key:
+            del st.session_state[key]
+
+
 def render_create_assignment(professor_id):
     """Author homework on a dedicated page, separate from the dashboard."""
     try:
@@ -110,22 +119,38 @@ def render_create_assignment(professor_id):
         st.info("You need an active class before creating an assignment.")
         return
     class_names = {str(classroom["_id"]): classroom["name"] for classroom in classes}
-    with st.form("create_assignment_form"):
+    # No st.form here: the "Edit problems" dialog needs ordinary buttons, and keyed
+    # widgets keep their values while the dialog reruns the page.
+    with st.container(border=True):
+        st.markdown("**Details**")
         course_ids = list(class_names)
         preferred = st.session_state.get("create_course_id")
-        class_id = st.selectbox("Class", options=course_ids, format_func=class_names.get,
+        class_id = st.selectbox("Class", options=course_ids, format_func=class_names.get, key="create_assignment_class",
                                 index=course_ids.index(preferred) if preferred in course_ids else 0)
-        title = st.text_input("Assignment title")
-        description = st.text_area("Description")
-        posted = st.date_input("Posted date", help="Students can see this assignment starting on this date (UTC).")
-        due_date = st.date_input("Due date", help="Deadline: midnight UTC at the start of the selected date. Late submissions are accepted.")
-        first_problem = problem_editor("First problem", key="create_assignment_first_problem")
-        first_fields = grading_fields(
-            first_problem, key_prefix="create_assignment_first_problem",
-        )
-        st.caption("Post homework to make it available on the posted date, or finish later to save a private draft.")
-        submitted = st.form_submit_button("Post homework", type="primary")
-        finish_later = st.form_submit_button("Finish later")
+        title = st.text_input("Assignment title", key="create_assignment_title")
+        description = st.text_area("Description", key="create_assignment_description")
+        posted_column, due_column = st.columns(2)
+        posted = posted_column.date_input("Posted date", key="create_assignment_posted",
+                                          help="Students can see this assignment starting on this date (UTC).")
+        due_date = due_column.date_input("Due date", key="create_assignment_due",
+                                         help="Deadline: midnight UTC at the start of the selected date. Late submissions are accepted.")
+
+    # Questions live in session state until the assignment is created.
+    problems = st.session_state.setdefault(CREATE_PROBLEMS, [])
+
+    def save(problem_id, problem):
+        problems[:] = [problem if row["problem_id"] == problem_id else row for row in problems]
+
+    def remove(problem_id):
+        problems[:] = [row for row in problems if row["problem_id"] != problem_id]
+
+    with st.container(border=True):
+        problem_manager(problems, key="create_assignment", save=save, remove=remove, add=problems.append)
+
+    st.caption("Post homework to make it available on the posted date, or finish later to save a private draft.")
+    with st.container(horizontal=True):
+        submitted = st.button("Post homework", type="primary", icon=":material/send:", key="create_assignment_post")
+        finish_later = st.button("Finish later", icon=":material/schedule:", key="create_assignment_finish_later")
 
     if submitted or finish_later:
         try:
@@ -135,12 +160,12 @@ def render_create_assignment(professor_id):
                 raise ValueError("Posted date and due date are required.")
             if due_date < posted:
                 raise ValueError("Due date cannot be before the posted date.")
-            if submitted and not first_problem.strip():
-                raise ValueError("At least one problem is required.")
+            if submitted and not problems:
+                raise ValueError("Add at least one question with Edit problems before posting.")
             assignment_id = create_assignment(
                 title, professor_id, description, class_id=class_id,
                 posted=posted, due_date=due_date, status="published" if submitted else "draft",
-                problems=[authored_problem(first_fields)] if first_problem.strip() else [],
+                problems=list(problems),
             )
         except (ValueError, RuntimeError, PyMongoError) as error:
             logger.exception("Assignment creation failed")
@@ -151,6 +176,7 @@ def render_create_assignment(professor_id):
                 else "Draft saved. Open it under Draft assignments to finish later."
             )
             st.session_state.selected_assignment_id = assignment_id
+            _clear_create_form()
             origin_course = st.session_state.pop("create_course_id", None)
             st.session_state.professor_assignment_return_page = (
                 "app_pages/course.py" if origin_course == str(class_id) else "app_pages/assignments.py"
@@ -193,15 +219,21 @@ def render_assignment_groups(assignments, class_names, completions, *, key="prof
     def render(pair):
         assignment, state = pair
         _render_assignment_card(assignment, state, class_names.get(assignment.get("class_id")), completions.get(assignment["_id"]), return_page=return_page)
-    compact_list(rows, render, title=f"More {category.lower()} assignments", key=key)
+    compact_list(rows, render, title=f"More {category.lower()} assignments", key=key, columns=2)
 
 
 class professorDash(Dashboard):
     def load_dash(self):
         show_notices()
         user = st.session_state.get("user") or {}
-        st.title("Dashboard")
-        st.caption(f"Welcome back, {user.get('first_name') or 'Professor'}")
+        with st.container(horizontal=True, vertical_alignment="bottom"):
+            with st.container(gap="xxsmall"):
+                st.title("Dashboard")
+                st.caption(f"Welcome back, {user.get('first_name') or 'Professor'}")
+            if st.button("All assignments", key="professor_all_assignments", icon=":material/assignment:"):
+                st.switch_page("app_pages/assignments.py")
+            if st.button("Create assignment", type="primary", icon=":material/add:"):
+                st.switch_page("app_pages/create_assignment.py")
         professor_id = user.get("id")
         if not professor_id:
             st.error("Your professor account is missing an ID.")
@@ -214,9 +246,7 @@ class professorDash(Dashboard):
             return
         if message := st.session_state.pop("professor_assignment_success", None):
             show_success(message)
-        if st.button("Create assignment", type="primary", icon=":material/add:"):
-            st.switch_page("app_pages/create_assignment.py")
-        main, todo = st.columns([3, 1], gap="large")
+        main, todo = st.columns([2, 1], gap="large")
         with main:
             st.subheader("Courses")
             courses = [{"_id": cid, "name": name} for cid, name in class_names.items()]
@@ -231,5 +261,3 @@ class professorDash(Dashboard):
             def render(row):
                 _render_assignment_card(row, assignment_state(row), class_names.get(row.get("class_id")), completions.get(row["_id"]))
             compact_list(upcoming, render, title="More active assignments", key="professor_active")
-        if st.button("View all assignments", key="professor_all_assignments"):
-            st.switch_page("app_pages/assignments.py")
