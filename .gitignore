@@ -13,3 +13,4 @@ test-results.xml
 .claude/skills/developing-with-streamlit
 /.idea
 .streamlit/secrets.toml
+feedback_export_*.csv

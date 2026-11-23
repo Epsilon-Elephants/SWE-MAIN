@@ -6,6 +6,7 @@ from urllib.parse import urlparse
 
 import requests
 import streamlit as st
+from components import brand
 from ddgs import DDGS
 from dotenv import load_dotenv
 from pymongo.errors import PyMongoError
@@ -88,7 +89,9 @@ def get_rocky():
 # dialogs for when Rocky is clicked
 @st.dialog("Rocky")
 def rocky_dialog() -> None:
-    st.caption("Hi, I'm Rocky your AI assistant!")
+    with st.container(horizontal=True, vertical_alignment="center", gap="small"):
+        st.image(brand.MARK, width=40)
+        st.caption("Hi, I'm Rocky, your AI study assistant. Ask about any logic or philosophy topic.")
     question = st.text_input(
       "Ask a question:",
       placeholder="What is the difference between propositional and first order logic?",

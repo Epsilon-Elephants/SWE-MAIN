@@ -34,7 +34,8 @@ legacy `pages/` directory, to avoid page-name collisions on refresh.
 | Location | Responsibility |
 | --- | --- |
 | [`app/app.py`](../app/app.py) | Entry point, initial user state, shared styling, and role-scoped navigation. |
-| [`.streamlit/config.toml`](../.streamlit/config.toml) | Academic theme, built-in fonts, and sidebar palette. |
+| [`.streamlit/config.toml`](../.streamlit/config.toml) | Navy-and-gold brand theme, built-in fonts, and sidebar palette. |
+| [`app/components/brand.py`](../app/components/brand.py), [`app/assets/brand/`](../app/assets/brand/) | Product name, logo, favicon, sidebar identity/footer, and shared CSS. |
 | [`app/app_pages/`](../app/app_pages/) | Overview, homework, professor creation/editing, classes, student practice, and account routes. |
 | [`app/app_pages/overview.py`](../app/app_pages/overview.py), [`welcome.py`](../app/pages/welcome.py) | Show login or dispatch to the student's/professor's dashboard. |
 | [`app/auth/`](../app/auth) | Registration, password verification, and login rate limiting. |

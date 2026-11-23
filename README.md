@@ -21,6 +21,13 @@ to practice. Each student class card includes a private focus-topic panel. Statu
 popups confirm saves, questions sent to Rocky, and grading results, including
 failed or blocked grading.
 
+## Branding
+
+The app ships as **Philosophy Classroom** (Kent State, built by Epsilon Elephants),
+with Rocky's squirrel as the mark. Navy `#002664` and gold `#EAAB00` drive the
+theme in `.streamlit/config.toml`. Logos, favicon, and shared styling live in
+`app/assets/brand/` and `app/components/brand.py`; change names or colors there.
+
 ## Documentation
 
 - [Product audit — October 26, 2026](docs/product-audit-2026-10-26.md): requirement coverage, defects, changes, verification, and remaining work.
