@@ -7,12 +7,12 @@ from pymongo.errors import PyMongoError
 from components.problem_manager import problem_manager
 from db.DataBase import db
 from db.assignments import create_assignment, list_assignments_for_professor
-from db.homework_submissions import summarize_submissions
+from db.homework_submissions import count_awaiting_review, summarize_submissions
 from pages.dashboards.dashboard import Dashboard
 from components.compact_list import compact_list, close_compact_list
 from components.course_cards import course_cards, assignment_row
 from components.analytics import professor_insights, professor_courses
-from components.notifications import show_notices, show_success
+from components.notifications import notify
 from db.analytics import load_professor_analytics
 from homework.analytics import summarize_scores
 
@@ -171,7 +171,7 @@ def render_create_assignment(professor_id):
             logger.exception("Assignment creation failed")
             st.error(str(error) if isinstance(error, ValueError) else "Could not create the assignment. Try again.")
         else:
-            st.session_state.professor_assignment_success = (
+            notify(
                 "Homework posted (available from the posted date)." if submitted
                 else "Draft saved. Open it under Draft assignments to finish later."
             )
@@ -222,9 +222,38 @@ def render_assignment_groups(assignments, class_names, completions, *, key="prof
     compact_list(rows, render, title=f"More {category.lower()} assignments", key=key, columns=2)
 
 
+REVIEW_QUEUE_SIZE = 5
+
+
+def _review_queue(assignments, class_names):
+    """Assignments with students whose grade is not confirmed yet, most first."""
+    st.subheader("Needs review")
+    try:
+        waiting = count_awaiting_review([row["_id"] for row in assignments if row.get("status") != "draft"])
+    except (ValueError, RuntimeError, PyMongoError):
+        logger.exception("Failed to load the review queue")
+        st.caption("The review queue is unavailable right now.")
+        return
+    queue = sorted((row for row in assignments if waiting.get(row["_id"])),
+                   key=lambda row: (-waiting[row["_id"]], _due_sort_key(row)))
+    if not queue:
+        st.caption("You're all caught up. Every submitted grade is confirmed.")
+        return
+    with st.container(border=True, gap="small"):
+        for row in queue[:REVIEW_QUEUE_SIZE]:
+            with st.container(horizontal=True, vertical_alignment="center", gap="small"):
+                with st.container(gap="xxsmall"):
+                    st.markdown(f"**{row.get('title', 'Untitled')}**")
+                    st.caption(f"{class_names.get(row.get('class_id'), 'Course')} · {waiting[row['_id']]} awaiting review")
+                if st.button("Review", key=f"review_queue_{row['_id']}", icon=":material/grading:"):
+                    st.session_state[f"assignment_editor_tab_{row['_id']}"] = "Submissions"
+                    _open_assignment(row["_id"], return_page="app_pages/overview.py")
+        if len(queue) > REVIEW_QUEUE_SIZE:
+            st.caption(f"+{len(queue) - REVIEW_QUEUE_SIZE} more in Assignments.")
+
+
 class professorDash(Dashboard):
     def load_dash(self):
-        show_notices()
         user = st.session_state.get("user") or {}
         with st.container(horizontal=True, vertical_alignment="bottom"):
             with st.container(gap="xxsmall"):
@@ -244,8 +273,6 @@ class professorDash(Dashboard):
         except (ValueError, RuntimeError, PyMongoError):
             st.error("Could not load your courses. Try again.")
             return
-        if message := st.session_state.pop("professor_assignment_success", None):
-            show_success(message)
         main, todo = st.columns([2, 1], gap="large")
         with main:
             st.subheader("Courses")
@@ -254,10 +281,16 @@ class professorDash(Dashboard):
                 st.caption("Your courses will appear here once they are set up.")
             course_cards(professor_courses(professor_id, courses), key="professor_courses")
         with todo:
-            st.subheader("To do")
-            upcoming = sorted((row for row in assignments if assignment_state(row) in {"open", "past_due", "scheduled"}), key=_due_sort_key)
+            _review_queue(assignments, class_names)
+            st.subheader("Upcoming")
+            upcoming = sorted((row for row in assignments if assignment_state(row) in {"open", "scheduled"}), key=_due_sort_key)
             if not upcoming:
-                st.caption("No active assignments.")
+                st.caption("Nothing open or scheduled.")
             def render(row):
-                _render_assignment_card(row, assignment_state(row), class_names.get(row.get("class_id")), completions.get(row["_id"]))
-            compact_list(upcoming, render, title="More active assignments", key="professor_active")
+                state = assignment_state(row)
+                summary = completions.get(row["_id"]) or {}
+                detail = f"{class_names.get(row.get('class_id'), 'Course')} · Due {_format_date(row.get('due_date'))}"
+                assignment_row(row.get("title", "Untitled"), detail + f" · {summary.get('students', 0)} submitted",
+                               STATE_LABELS[state], key=f"upcoming_{row['_id']}",
+                               open_assignment=lambda: _open_assignment(row["_id"], return_page="app_pages/overview.py"))
+            compact_list(upcoming, render, title="More upcoming assignments", key="professor_active")

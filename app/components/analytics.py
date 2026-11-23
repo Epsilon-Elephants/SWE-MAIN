@@ -57,7 +57,7 @@ def professor_insights(summary, *, course=False, compact=False):
     elif not summary.get("has_topics"):
         st.caption("No topic labels on graded questions yet.")
     else:
-        st.caption("No topics below 70% in the latest graded work.")
+        st.caption("No topics below 70% in the graded work.")
 
 
 def student_insights(summary):
@@ -72,6 +72,6 @@ def student_insights(summary):
         elif topics := summary.get("struggling_topics"):
             for topic in topics:
                 st.caption(f"{topic['topic']} · Your score: {topic['average']:.1f}%")
-            st.caption("Practice topics below 70%. Only your latest graded attempts in this class are used.")
+            st.caption("Practice topics below 70%. Uses the score that counts on each assignment.")
         else:
-            st.caption("No topics below 70% in your latest graded work. Keep it up!")
+            st.caption("No topics below 70% in your graded work. Keep it up!")

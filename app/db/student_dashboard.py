@@ -2,20 +2,26 @@
 from db.DataBase import db
 from db.assignments import list_assignments_for_student
 from db.homework_submissions import list_submissions_for_student
-from homework.grades import effective_grade
+from homework.grades import attempt_score, group_attempts, kept_attempt
 from homework.results import grading_label
 from homework.study import submission_recommendations
 from homework.analytics import summarize_scores
 
 
-def _latest_attempt(submission):
-    """Student-safe summary of the latest attempt: when, a score label, and the percentage."""
+def _latest_attempt(submission, attempts=()):
+    """Student-safe summary: newest attempt time, plus the score that counts.
+
+    The score follows kept_attempt (professor decision, otherwise highest Rocky
+    score), so a weaker resubmission never lowers what the dashboard shows.
+    """
     if submission is None:
         return {"submitted_at": None, "grade_label": None, "score_percentage": None}
+    kept = kept_attempt(attempts or [submission])
+    score = attempt_score(kept)
     return {
         "submitted_at": submission.get("submitted_at"),
-        "grade_label": grading_label(submission),
-        "score_percentage": (effective_grade(submission) or {}).get("percentage"),
+        "grade_label": grading_label(kept or submission),
+        "score_percentage": round(100 * score[0] / score[1], 2) if score else None,
     }
 
 
@@ -34,6 +40,7 @@ def load_student_overview(user_id):
     latest = {}
     for row in submissions:
         latest.setdefault(row["assignment_id"], row)
+    attempts = group_attempts(submissions)
     return {
         "classes": [
             {"_id": row["class_id"], "Class": classes.get(row["class_id"], "Class unavailable"),
@@ -49,7 +56,7 @@ def load_student_overview(user_id):
              "class_id": row["class_id"],
              "class_name": classes.get(row["class_id"], "Class unavailable"),
              "submitted": row["_id"] in latest,
-             **_latest_attempt(latest.get(row["_id"]))}
+             **_latest_attempt(latest.get(row["_id"]), attempts.get(row["_id"], ()))}
             for row in assignments
         ],
         "attempts": len(submissions),

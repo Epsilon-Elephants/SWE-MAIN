@@ -15,11 +15,10 @@ from db.assignments import (
     update_problem,
 )
 from db.homework_submissions import list_submissions_for_assignment
-from homework.results import grading_label
-from homework.review_views import REVIEW_SELECTION, review_submission_dialog
-from components.compact_list import compact_list, close_compact_list
+from homework.review_views import REVIEW_SELECTION, review_button, review_submission_dialog
+from components.grade_book import attempt_groups
 from homework.schema import authored_problems
-from components.notifications import show_notices, show_success, observe_grading
+from components.notifications import notify, observe_grading
 
 logger = logging.getLogger(__name__)
 
@@ -47,10 +46,11 @@ def _show_error(error):
     st.toast(message, icon=":material/error:")
 
 
+def editor_tab_key(assignment_id):
+    return f"assignment_editor_tab_{assignment_id}"
+
+
 def _render_submissions(assignment_id, professor_id):
-    st.markdown("**Submissions**")
-    if message := st.session_state.pop("professor_grading_notice", None):
-        show_success(message)
     try:
         rows = list_submissions_for_assignment(assignment_id, professor_id)
     except (ValueError, RuntimeError, PyMongoError) as error:
@@ -60,27 +60,16 @@ def _render_submissions(assignment_id, professor_id):
         st.info("No submissions yet.")
         return
     observe_grading(rows)
-    st.caption(f"{len(rows)} submitted attempt{'s' if len(rows) != 1 else ''}.")
-    def render_attempt(attempt):
-        with st.container(border=True):
-            identity, score, action = st.columns([3, 2, 2], vertical_alignment="center")
-            identity.write(_student_name(attempt.get('user')))
-            identity.caption(_format_timestamp(attempt.get('submitted_at')))
-            score.caption(grading_label(attempt))
-            if action.button("Review and grade", key=f"review_submission_{attempt['_id']}", icon=":material/grading:"):
-                close_compact_list()
-                st.session_state[REVIEW_SELECTION] = {
-                    "assignment_id": str(assignment_id), "submission_id": str(attempt["_id"]),
-                    "revision": attempt.get("professor_grade_revision", 0),
-                }
-                st.rerun()
-    compact_list(rows, render_attempt, title="More submissions", key=f"professor_submissions_{assignment_id}")
+    attempt_groups(rows, group_by="user_id", title_of=lambda attempts: _student_name(attempts[0].get("user")),
+                   key=f"professor_submissions_{assignment_id}",
+                   attempt_action=lambda attempt: review_button(attempt, assignment_id))
 
 
 def show_assignment_editor(assignment_id, professor_id: str):
-    show_notices()
     return_page = st.session_state.get("professor_assignment_return_page", "app_pages/assignments.py")
-    if st.button("Back to course" if return_page == "app_pages/course.py" else "Back to assignments",
+    back_label = {"app_pages/course.py": "Back to course", "app_pages/overview.py": "Back to dashboard"}.get(
+        return_page, "Back to assignments")
+    if st.button(back_label,
                  key="back_to_assignments", icon=":material/arrow_back:", type="tertiary"):
         st.session_state.pop("selected_assignment_id", None)
         st.switch_page(return_page)
@@ -100,12 +89,11 @@ def show_assignment_editor(assignment_id, professor_id: str):
     with st.container(horizontal=True, vertical_alignment="center"):
         st.title(assignment.get("title", "Assignment"))
         st.badge(current_status.capitalize(), color=status_color(current_status))
-    if message := st.session_state.pop("professor_assignment_success", None):
-        show_success(message)
     is_draft = assignment.get("status", "draft") == "draft"
-    st.caption("Save each question before switching questions or publishing the assignment.")
 
-    details_tab, problems_tab, submissions_tab = st.tabs(["Details", "Problems", "Submissions"])
+    # A stable key keeps the open tab across reruns (e.g. after grading in the review window).
+    details_tab, problems_tab, submissions_tab = st.tabs(
+        ["Details", "Problems", "Submissions"], key=editor_tab_key(assignment_id), on_change="rerun")
     with details_tab:
         with st.form(f"assignment_{assignment_key}"):
             title = st.text_input("Title", value=assignment.get("title", ""))
@@ -151,7 +139,7 @@ def show_assignment_editor(assignment_id, professor_id: str):
                 )
                 if not saved:
                     raise ValueError("Assignment could not be saved. Reload and try again.")
-                st.session_state.professor_assignment_success = (
+                notify(
                     "Draft saved." if status == "draft" else "Homework saved (available from the posted date)."
                 )
                 if finish_later:
@@ -175,14 +163,14 @@ def show_assignment_editor(assignment_id, professor_id: str):
                 except (ValueError, RuntimeError, PyMongoError) as error:
                     _show_error(error)
                 else:
-                    st.session_state.professor_assignment_success = "Assignment closed." if new_status == "closed" else "Assignment reopened."
+                    notify("Assignment closed." if new_status == "closed" else "Assignment reopened.")
                     st.rerun()
 
             confirm_delete = st.checkbox("Confirm assignment deletion")
             if st.button("Delete assignment", disabled=not confirm_delete):
                 try:
                     if delete_assignment(assignment_id, professor_id):
-                        st.session_state.professor_assignment_success = "Assignment deleted."
+                        notify("Assignment deleted.")
                         st.session_state.pop("selected_assignment_id", None)
                         st.switch_page(return_page)
                     else:
@@ -192,8 +180,8 @@ def show_assignment_editor(assignment_id, professor_id: str):
 
 
     with problems_tab:
-        if is_draft:
-            st.caption("Students see these questions once the assignment is posted.")
+        st.caption("Save each question before switching questions or publishing the assignment."
+                   + (" Students see these questions once the assignment is posted." if is_draft else ""))
         problem_manager(
             assignment.get("problems", []),
             key=assignment_key,

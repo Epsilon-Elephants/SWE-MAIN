@@ -130,8 +130,8 @@ def test_zero_score_and_fractional_points_are_real_scores():
     assert summary["combined"]["possible"] == 1.6
 
 
-@pytest.mark.parametrize("section", ["Home", "Assignments", "Grades"])
-def test_student_course_header_shows_scoped_score_bar_in_every_section(section):
+@pytest.mark.parametrize("section", ["Home", "Grades"])
+def test_student_course_score_bar_is_scoped_and_shown_on_home_and_grades(section):
     uid, cid = ObjectId(), ObjectId()
     rows = [attempt(earned=9, possible=10, confirmed=8, user_id=uid, class_id=cid),
             attempt(earned=3, possible=5, user_id=uid, class_id=cid),
@@ -178,4 +178,19 @@ def test_score_refresh_rechecks_membership_before_reading_submissions():
         app.run()
         assert not app.exception
         history.assert_not_called()
+        assert not app.get("vega_lite_chart")
+
+
+def test_student_course_assignments_section_stays_uncluttered():
+    uid, cid = ObjectId(), ObjectId()
+    def read(collection, query):
+        return {"_id": cid, "name": "Logic"} if collection == "classes" else {"permissions": "student"}
+    with patch.object(db, "read_one", side_effect=read), patch("courses.views.list_assignments_for_student", return_value=[]), patch(
+        "courses.views.list_submissions_for_student", return_value=[],
+    ):
+        app = AppTest.from_string('from courses.views import show_course\nimport streamlit as st\nshow_course(st.session_state.user)')
+        app.session_state.user = {"id": str(uid), "permissions": "student"}
+        app.session_state.course_id = str(cid)
+        app.run()
+        assert not app.exception
         assert not app.get("vega_lite_chart")

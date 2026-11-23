@@ -102,8 +102,8 @@ and revision checks.
 Rocky grades remain tentative until a professor accepts them or saves an
 override. `professor_grade` stores that confirmed score, including whether its
 source is Rocky or a professor edit. `course_score_summary` groups attempts by
-assignment and uses the latest professor decision, or otherwise the newest
-graded AI attempt. An assignment with a confirmed score cannot also contribute
+assignment and uses the latest professor decision, or otherwise the highest
+graded AI attempt (`kept_attempt`). An assignment with a confirmed score cannot also contribute
 tentative points. The student course header refreshes its aggregate score bar
 every five seconds after rechecking current role and enrollment. Only point
 totals reach the chart; answers and grading references stay server-side.

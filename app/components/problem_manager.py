@@ -11,6 +11,7 @@ import logging
 import streamlit as st
 from pymongo.errors import PyMongoError
 
+from components.notifications import notify, show_notices
 from components.problem_editor import grading_fields, problem_editor
 from homework.schema import authored_problem
 
@@ -59,7 +60,7 @@ def _apply(key, action, message):
         st.error(message)
         st.toast(message, icon=":material/error:")
         return
-    st.session_state[_notice_key(key)] = message
+    notify(message, scope=_notice_key(key))
     st.rerun()
 
 
@@ -111,9 +112,7 @@ def _problem_dialog(problems, key, save, remove, add, min_problems):
     total = sum(float(problem.get("points", 1.0)) for problem in problems)
     st.caption(f"{len(problems)} question{'s' if len(problems) != 1 else ''} · {total:g} points total. "
                "Choose a question to edit it, or add a new one.")
-    if message := st.session_state.pop(_notice_key(key), None):
-        st.success(message, icon=":material/check_circle:")
-        st.toast(message, icon=":material/check_circle:")
+    show_notices(_notice_key(key))
 
     options = [problem["problem_id"] for problem in problems] + [NEW]
     labels = {problem["problem_id"]: f"Question {number} · {problem['content'][:70]}"

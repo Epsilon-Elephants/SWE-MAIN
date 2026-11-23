@@ -6,7 +6,7 @@ from pymongo.errors import PyMongoError
 from db.DataBase import db
 from components.compact_list import close_compact_list
 from components.analytics import professor_insights, professor_courses
-from components.notifications import show_success
+from components.notifications import notify, show_notices
 from db.analytics import load_professor_analytics
 
 logger = logging.getLogger(__name__)
@@ -54,11 +54,11 @@ def _render_roster(class_id, professor_id):
             try:
                 if save_grade:
                     db.update_student_grade_as(class_id, student_id, professor_id, earned_input, possible_input)
-                    st.session_state.professor_enrollment_success = "Grade saved."
+                    notify("Grade saved.", scope="roster")
                     st.rerun()
                 if remove:
                     db.remove_student_as(class_id, student_id, professor_id)
-                    st.session_state.professor_enrollment_success = "Student removed from the class."
+                    notify("Student removed from the class.", scope="roster")
                     st.session_state.professor_roster_page = 0
                     st.rerun()
             except (ValueError, RuntimeError, PyMongoError) as error:
@@ -83,8 +83,7 @@ def _manage_class(class_id, professor_id):
         return
 
     st.subheader(classroom["name"])
-    if message := st.session_state.pop("professor_enrollment_success", None):
-        show_success(message)
+    show_notices("roster")
     if st.button("Close", key="professor_close_roster"):
         _dismiss_enrollment()
         st.rerun()
@@ -127,9 +126,7 @@ def _manage_class(class_id, professor_id):
                 logger.exception("Failed to enroll student")
                 st.error(str(error) if isinstance(error, ValueError) else "Could not enroll the student.")
             else:
-                st.session_state.professor_enrollment_success = (
-                    f"Added {student.get('email', 'student')} to the class."
-                )
+                notify(f"Added {student.get('email', 'student')} to the class.", scope="roster")
                 st.rerun()
 
     st.caption(f"Page {page + 1}")
@@ -154,7 +151,6 @@ def _class_card(classroom):
             st.session_state.professor_student_page = 0
             st.session_state.professor_roster_page = 0
             st.session_state.pop(f"professor_class_section_{class_id}", None)
-            st.session_state.pop("professor_enrollment_success", None)
             st.session_state.professor_enrollment_class = class_id
             st.rerun()
 

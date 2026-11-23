@@ -198,7 +198,8 @@ def test_student_flow_from_dashboard_to_submission(homework):
         assert len(history) == 1
         assert history[0]["answers"][0]["answer"] == "Both must be true.&"
         grade.assert_not_called()
-        assert "Processing" in app.success[0].value
+        assert any("Homework submitted" in row.value for row in app.success)
+        assert any("Your grade" in row.value and "Processing" in row.value for row in app.markdown)
         assert all("PRIVATE ANSWER" not in e.value for e in [*app.markdown, *app.text, *app.caption])
         app.run()  # Ordinary reruns must never create extra attempts.
         assert len(history) == 1

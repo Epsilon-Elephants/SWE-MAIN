@@ -137,12 +137,13 @@ professorDash().load_dash()
             db, "list_classes_page", return_value=([{"_id": ObjectId(), "name": "Calculus"}], False),
         ), patch("pages.dashboards.professor._load_assignment_context", return_value=({ObjectId(): "Calculus"}, {})), patch(
             "components.analytics.load_professor_analytics", return_value={"classes": {}},
-        ):
+        ), patch("pages.dashboards.professor.count_awaiting_review", return_value={assignments[0]["_id"]: 3}):
             app.run()
         self.assertFalse(app.exception)
         columns = [column for column in app.get("column") if column.subheader]
         self.assertEqual(columns[0].subheader[0].value, "Courses")
-        self.assertEqual(columns[-1].subheader[0].value, "To do")
+        self.assertEqual([row.value for row in columns[-1].subheader], ["Needs review", "Upcoming"])
+        self.assertIn("Course · 3 awaiting review", [e.value for e in app.caption])
         self.assertIn("##### Calculus", [e.value for e in app.markdown])
         self.assertIn("Ongoing", [button.label for button in app.button])
         self.assertNotIn("Upcoming", [button.label for button in app.button])
@@ -169,7 +170,7 @@ render_create_assignment("{professor_id}")
     assert not app.exception
     assert create.call_args.kwargs["status"] == "draft"
     assert create.call_args.kwargs["problems"] == []
-    assert "Draft saved" in app.session_state.professor_assignment_success
+    assert any("Draft saved" in row["message"] for row in app.session_state["status_banners"])
 
 
 @pytest.mark.parametrize("status,expected", [("draft", "draft"), ("published", "published"), ("closed", "closed")])

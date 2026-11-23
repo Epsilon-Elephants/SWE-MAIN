@@ -19,7 +19,9 @@ from homework.results import grading_action, grading_label, show_problem_result
 
 from pages.dashboards.student.due_dates import due_sort_key, due_status, resolve_timezone
 from pages.dashboards.student.recently_visited import record_visit
-from components.notifications import queue_notice, show_notices, observe_grading, track_grading
+from components.notifications import notify, observe_grading, track_grading
+from components.grade_book import kept_summary
+from homework.grades import group_attempts
 
 
 ERRORS = (ValueError, RuntimeError, PyMongoError)
@@ -85,6 +87,7 @@ def show_homework_list():
         latest = {}
         for submission in submissions:
             latest.setdefault(submission["assignment_id"], submission)
+        attempts_by_assignment = group_attempts(submissions)
         if not assignments:
             st.info("No homework is available yet. Posted homework from your enrolled classes will appear here.")
         tz = user_tz()
@@ -104,7 +107,8 @@ def show_homework_list():
                    and (selected_group == "All assignments" or (row["_id"] in latest) == (selected_group == "Submitted"))]
         def render_assignment(assignment):
             submission = latest.get(assignment["_id"])
-            status = grading_label(submission) if submission else "Not submitted"
+            kept, kept_label, _ = kept_summary(attempts_by_assignment.get(assignment["_id"], []))
+            status = kept_label if kept else grading_label(submission) if submission else "Not submitted"
             def open_assignment():
                 close_compact_list()
                 st.session_state.homework_assignment_id = str(assignment["_id"])
@@ -121,8 +125,12 @@ def show_homework_list():
             st.error("Homework is unavailable right now. Please try again.")
 
 
+ATTEMPTS_DIALOG = "homework_attempts_dialog"
+
+
 @st.fragment(run_every="5s")
 def show_submission_history(assignment_id):
+    """Auto-refreshing grade line: the grade that counts plus the newest attempt's status."""
     user = student_user()
     try:
         get_homework_for_student(assignment_id, user["id"])
@@ -130,28 +138,59 @@ def show_submission_history(assignment_id):
         observe_grading(history)
         if not history:
             return
-        tz = user_tz()
-        st.success(f"Your homework has been submitted. {grading_label(history[0])}")
-        st.caption("You can submit another attempt. Each submitted attempt is saved separately.")
-        def render_attempt(attempt):
-            st.write(f"Submitted {format_date(attempt['submitted_at'], tz)} · {grading_label(attempt)}")
-            responses = {row["problem_id"]: row["answer"] for row in attempt["answers"]}
-            for number, problem in enumerate(attempt["assignment_snapshot"]["problems"], 1):
-                st.markdown(f"**Question {number}**")
-                st.write(problem["content"])
-                st.text(responses.get(problem["problem_id"], ""))
-                show_problem_result(attempt, problem["problem_id"])
-            grading_action(attempt, user["id"])
-        with st.expander(f"Submission details · {len(history)} attempt(s)"):
-            by_id = {str(row["_id"]): row for row in history}
-            selected = st.selectbox("Attempt", list(by_id), format_func=lambda sid: format_date(by_id[sid]["submitted_at"], tz), key=f"attempt_{assignment_id}")
-            render_attempt(by_id[selected])
+        kept, label, color = kept_summary(history)
+        count = f"{len(history)} attempt{'s' if len(history) != 1 else ''}"
+        st.markdown(f"**Your grade** :{color}-badge[{label}] · {count}")
+        if kept is None or history[0]["_id"] != kept["_id"]:
+            st.caption(f"Newest attempt: {grading_label(history[0])}")
+        if history[0].get("grading_status") in {"failed", "blocked"}:
+            # Problems the student can act on stay visible; routine processing does not.
+            grading_action(history[0], user["id"])
+        st.caption("Your highest score counts until your professor confirms a grade.")
     except ERRORS:
         st.error("Could not refresh saved submissions. Try again shortly.")
 
 
+def _close_attempts():
+    st.session_state.pop(ATTEMPTS_DIALOG, None)
+
+
+@st.dialog("Your attempts", width="large", on_dismiss=_close_attempts)
+def attempts_dialog(assignment_id, user_id):
+    tz = user_tz()
+    try:
+        history = list_submissions_for_student(user_id, assignment_id)
+    except ERRORS:
+        st.error("Could not load your attempts. Try again shortly.")
+        return
+    if not history:
+        st.caption("No attempts yet.")
+        return
+    kept = kept_summary(history)[0]
+    by_id = {str(row["_id"]): row for row in history}
+
+    def describe(sid):
+        number = len(history) - list(by_id).index(sid)
+        return f"Attempt {number} · {format_date(by_id[sid]['submitted_at'], tz)}" + (" · counts" if kept and by_id[sid]["_id"] == kept["_id"] else "")
+    # Open on the attempt that counts, since that's the feedback students look for first.
+    selected = st.selectbox("Attempt", list(by_id), format_func=describe, key=f"attempt_{assignment_id}",
+                            index=list(by_id).index(str(kept["_id"])) if kept else 0)
+    attempt = by_id[selected]
+    st.badge(grading_label(attempt), color="blue" if attempt.get("grading_status") == "graded" else "gray")
+    responses = {row["problem_id"]: row["answer"] for row in attempt["answers"]}
+    for number, problem in enumerate(attempt["assignment_snapshot"]["problems"], 1):
+        with st.container(border=True):
+            st.markdown(f"**Question {number}**")
+            st.write(problem["content"])
+            st.text(responses.get(problem["problem_id"], ""))
+            show_problem_result(attempt, problem["problem_id"])
+    grading_action(attempt, user_id)
+    if st.button("Close", key=f"close_attempts_{assignment_id}"):
+        _close_attempts()
+        st.rerun()
+
+
 def show_homework_assignment():
-    show_notices()
     user = student_user()
     return_page = st.session_state.get("homework_return_page", "app_pages/homework.py")
     back_label = {"app_pages/course.py": "Back to course", "app_pages/practice.py": "Back to practice"}.get(return_page, "Back to homework")
@@ -167,14 +206,21 @@ def show_homework_assignment():
         due = assignment.get("due_date")
         record_visit("homework", assignment_id, assignment["title"], class_name=classroom.get("name", ""), due=f"Due {format_date(due)}" if due else "No due date",)
         history = list_submissions_for_student(user["id"], assignment_id)
-        tz = user_tz()
         st.title(assignment["title"])
         problems = show_details(assignment, classroom.get("name", "Class unavailable"), bool(history))
-        show_submission_history(assignment_id)
-        st.info("Answer every question before submitting. Your answers save immediately, then Rocky grades in the background and suggests what to practice next. You can keep working while it processes.")
+        if history:
+            with st.container(border=True):
+                show_submission_history(assignment_id)
+                if st.button("View attempts and feedback", icon=":material/history:", key=f"view_attempts_{assignment_id}"):
+                    st.session_state[ATTEMPTS_DIALOG] = assignment_id
+            if st.session_state.get(ATTEMPTS_DIALOG) == assignment_id:
+                attempts_dialog(assignment_id, user["id"])
         answers = {}
+        # Once something is submitted, keep the page short: a new attempt is opt-in.
+        answer_area = st.expander("Submit another attempt", icon=":material/edit_note:") if history else st.container()
         # Include the user ID so answers cannot carry over to another login.
-        with st.form(f"homework_answers_{user['id']}_{assignment_id}"):
+        with answer_area, st.form(f"homework_answers_{user['id']}_{assignment_id}"):
+            st.caption("Answer every question, then submit. Rocky grades in the background, so you can leave this page.")
             for number, problem in enumerate(problems, 1):
                 st.subheader(f"Question {number}")
                 st.write(problem["content"])
@@ -187,7 +233,8 @@ def show_homework_assignment():
         if submitted:
             submission_id = submit_homework(assignment_id, user["id"], answers)
             track_grading(submission_id)
-            queue_notice("Homework saved and queued for Rocky grading.", icon=":material/send:")
+            notify("Homework submitted. Rocky is grading it now; you'll get a banner when scores are ready.",
+                   icon=":material/send:")
             st.rerun()
     except ERRORS as error:
         if isinstance(error, ValueError):

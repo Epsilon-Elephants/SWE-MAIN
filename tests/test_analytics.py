@@ -168,8 +168,12 @@ import streamlit as st
 from pages.dashboards.professor import professorDash
 st.session_state.user = {{"id": "{professor}", "permissions": "professor", "first_name": "Ada"}}
 professorDash().load_dash()
+# Assignment-level insights live on the Assignments page, not the dashboard.
+from pages.dashboards.professor import _load_assignment_context, list_assignments_for_professor, render_assignment_groups
+rows = list_assignments_for_professor("{professor}")
+render_assignment_groups(rows, *_load_assignment_context("{professor}", rows))
 ''')
-    with patch("pages.dashboards.professor.list_assignments_for_professor", return_value=[
+    with patch("pages.dashboards.professor.count_awaiting_review", return_value={}), patch("pages.dashboards.professor.list_assignments_for_professor", return_value=[
         {"_id": assignment, "class_id": course, "status": "published", "title": "Homework"},
     ]), patch("pages.dashboards.professor._load_assignment_context", return_value=(
         {course: "Logic class"}, {assignment: {"students": 1, "attempts": 2, "analytics": summary}},

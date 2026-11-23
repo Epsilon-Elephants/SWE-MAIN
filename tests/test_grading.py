@@ -272,6 +272,20 @@ def test_professor_submission_listing_authorizes_before_reading(memory, monkeypa
     aggregate.assert_not_called()
 
 
+def grade_line(app):
+    """The student's 'Your grade' panel text on the homework page."""
+    return " ".join(row.value for row in app.markdown if "Your grade" in row.value)
+
+
+def banner_text(app):
+    return " ".join(row.value for kind in ("success", "info", "warning", "error") for row in getattr(app, kind))
+
+
+def open_attempts(app):
+    next(button for button in app.button if button.label == "View attempts and feedback").click().run()
+    return app
+
+
 def test_student_submit_displays_saved_problem_grades_and_does_not_grade_on_rerun(memory, monkeypatch):
     client = GradingClient()
     from homework import grading
@@ -286,11 +300,14 @@ def test_student_submit_displays_saved_problem_grades_and_does_not_grade_on_reru
     app.text_area[1].set_value("At least one.")
     next(button for button in app.button if button.label == "Submit homework").click().run()
     assert not app.exception
-    assert "Processing" in app.success[0].value
+    assert "Homework submitted" in banner_text(app)
+    assert "Processing" in grade_line(app)
     assert client.calls == 0
     assert process_next_submission()
     app.run()
-    assert "75%" in app.success[0].value
+    assert "Rocky finished grading" in banner_text(app)
+    assert "75%" in grade_line(app)
+    open_attempts(app)
     assert "Correct reasoning." in [row.value for row in app.text]
     assert any("1/2 points" in row.value for row in app.caption)
     visible = " ".join(row.value for row in [*app.text, *app.markdown, *app.caption, *app.info])
@@ -336,10 +353,10 @@ def test_student_can_retry_saved_failed_attempt_in_ui(memory, monkeypatch):
     app.button(key=f"grade_submission_{sid}").click().run()
     assert not app.exception
     assert client.calls == 0
-    assert "Processing" in app.success[0].value
+    assert "queued for Rocky grading" in banner_text(app)
     assert process_next_submission()
     app.run()
-    assert "75%" in app.success[0].value
+    assert "75%" in grade_line(app)
     assert client.calls == 1
     assert len(memory.collections["homework_submissions"]) == 1
 
@@ -400,7 +417,8 @@ def test_student_is_told_work_is_saved_when_grading_persistence_fails(memory, mo
     app.text_area[1].set_value("At least one.")
     next(button for button in app.button if button.label == "Submit homework").click().run()
     assert not app.exception
-    assert "Processing" in app.success[0].value
+    assert "Homework submitted" in banner_text(app)
+    assert "Processing" in grade_line(app)
     assert all("PRIVATE" not in row.value for row in [*app.warning, *app.error])
     assert len(memory.collections["homework_submissions"]) == 1
 
@@ -457,7 +475,7 @@ def test_recommendations_follow_latest_attempt_and_professor_override(memory):
     assert submission_recommendations([original, saved])[0]["ratio"] == 0
 
 
-def test_overflow_submission_opens_professor_review_without_nested_dialogs(memory, monkeypatch):
+def test_repeat_attempts_group_under_one_student_and_open_review(memory, monkeypatch):
     from pages import assignment_editor
     for _ in range(6):
         memory.submit()
@@ -472,13 +490,13 @@ show_assignment_editor("{memory.assignment_id}", "{memory.professor}")
     app.session_state.user = {"id": str(memory.professor), "permissions": "professor"}
     app.run()
     assert not app.exception
-    assert len([button for button in app.button if button.label == "Review and grade"]) == 5
-    app.button(key=f"professor_submissions_{memory.assignment_id}_see_more").click().run()
-    assert not app.exception
+    # Six attempts from one student collapse into a single student row with a dropdown.
+    groups = [row for row in app.expander if "**Student**" in row.label]
+    assert len(groups) == 1 and "6 attempts" in groups[0].label
+    assert len([button for button in app.button if button.label == "Review"]) == 6
     app.button(key=f"review_submission_{rows[-1]['_id']}").click().run()
     assert not app.exception
     assert "Both true." in [row.value for row in app.text]
-    assert "expanded_list" not in app.session_state
 
 
 def test_automatic_outage_retry_recovers_and_publishes_recommendations(memory):
@@ -555,7 +573,8 @@ def test_professor_ui_can_confirm_override_and_restore_without_double_counting(m
     assert not app.exception
     app.button(key=f"confirm_rocky_{sid}").click().run()
     assert not app.exception
-    assert any("Confirmed score: 3/4 points" in row.value for row in app.caption)
+    assert any("Confirmed score: 3/4 points" in row.value for row in [*app.caption, *app.markdown])
+    assert any("Rocky's scores are confirmed" in row["message"] for row in app.session_state["status_banners"])
     saved = memory.collections["homework_submissions"][0]
     assert course_score_summary([saved])["confirmed"]["earned"] == 3
     app.button(key=f"review_submission_{sid}").click().run()

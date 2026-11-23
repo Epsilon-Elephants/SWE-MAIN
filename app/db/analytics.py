@@ -18,15 +18,10 @@ def load_professor_analytics(professor_id, class_ids=None):
     if not ids:
         return {"classes": {}, "assignments": {}}
     # Fetch only the fields required for summaries. Answer keys and responses
-    # never leave the database for this read.
+    # never leave the database for this read. summarize_scores picks the kept
+    # attempt per student and assignment, so the rule lives in one place.
     rows = list(db.aggregate("homework_submissions", [
         {"$match": {"class_id": {"$in": ids}, "grading_status": "graded"}},
-        {"$set": {"_analytics_confirmed": {"$cond": [{"$eq": [{"$type": "$professor_grade"}, "object"]}, 1, 0]},
-                  "_analytics_graded_at": {"$ifNull": ["$professor_grade.graded_at", "$submitted_at"]}}},
-        {"$sort": {"_analytics_confirmed": -1, "_analytics_graded_at": -1, "submitted_at": -1, "_id": -1}},
-        {"$group": {"_id": {"student": "$user_id", "assignment": "$assignment_id"},
-                     "attempt": {"$first": "$$ROOT"}}},
-        {"$replaceRoot": {"newRoot": "$attempt"}},
         {"$project": {"user_id": 1, "class_id": 1, "assignment_id": 1,
                       "submitted_at": 1, "grading_status": 1,
                       "grading_result.total_points": 1, "grading_result.max_points": 1,

@@ -99,15 +99,19 @@ def test_overview_metrics_and_card_details():
         "pages.dashboards.professor._load_assignment_context", return_value=context,
     ), patch.object(db, "list_classes_page", return_value=([], False)), patch(
         "components.analytics.load_professor_analytics", return_value={"classes": {}},
-    ):
+    ), patch("pages.dashboards.professor.count_awaiting_review", return_value={late_id: 2}):
         app = dashboard_app(professor_id).run()
     assert not app.exception
     assert not app.metric
     assert app.button(key=f"professor_courses_{class_id}")
     captions = [caption.value for caption in app.caption]
-    assert any("Logic · Due" in c and "1 question" in c and "3 submitted" in c for c in captions)
+    assert any("Logic · Due" in c and "3 submitted" in c for c in captions)
     # Row status is shown as a badge (a Markdown color-badge directive).
-    assert ":red-badge[Past due]" in [row.value for row in app.markdown]
+    assert ":green-badge[Open]" in [row.value for row in app.markdown]
+    # Past-due work leaves Upcoming; it surfaces in Needs review only while grades await confirmation.
+    assert "Logic · 2 awaiting review" in captions
+    assert app.button(key=f"review_queue_{late_id}")
+    assert not any(button.label == "Late" for button in app.button)
 
 
 def editor_app(assignment_id, professor_id):
@@ -177,10 +181,12 @@ def test_editor_lists_submissions():
         app = editor_app(assignment_id, professor_id).run()
     assert not app.exception
     assert not app.dataframe
-    assert "Grace Hopper" in [row.value for row in app.markdown]
-    assert "Tentative Rocky score: 7/10 points · 70%" in [row.value for row in app.caption]
-    assert "Nov 05, 2026 14:30 UTC" in [row.value for row in app.caption]
-    assert app.button(key=f"review_submission_{rows[0]['_id']}").label == "Review and grade"
+    # One row per student, with the grade that counts in the dropdown header.
+    assert [row.label for row in app.expander if "attempt" in row.label] == ["**Grace Hopper** · 1 attempt · :blue-badge[Highest 7/10 · 70%]"]
+    assert ":blue-badge[Tentative Rocky score: 7/10 points · 70%]" in [row.value for row in app.markdown]
+    assert "Attempt 1 · Nov 05, 2026 14:30 UTC" in [row.value for row in app.caption]
+    assert "1 student · 1 attempt · 1 awaiting your review" in [row.value for row in app.caption]
+    assert app.button(key=f"review_submission_{rows[0]['_id']}").label == "Review"
     assert "Student response" not in [text.value for text in app.text]
 
 

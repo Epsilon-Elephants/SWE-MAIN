@@ -8,8 +8,8 @@ from components.course_cards import course_cards, assignment_row
 from db.DataBase import db
 from db.assignments import list_assignments_for_professor, list_assignments_for_student
 from db.homework_submissions import list_submissions_for_student
-from homework.results import grading_label
-from homework.grades import course_score_summary
+from homework.grades import course_score_summary, group_attempts
+from components.grade_book import attempt_groups, kept_percentage, needs_review
 from homework.analytics import summarize_scores
 from components.analytics import professor_courses, student_insights
 from components.notifications import observe_grading
@@ -110,6 +110,91 @@ def show_courses(user):
         st.error("Could not load your courses. Check your access and try again.")
 
 
+def _name(user):
+    user = user or {}
+    return " ".join(filter(None, [user.get("first_name"), user.get("last_name")])) or "Unknown student"
+
+
+def _unique_titles(assignments):
+    """Gradebook column per assignment; repeated titles get a numeric suffix."""
+    seen, titles = {}, {}
+    for row in assignments:
+        title = row.get("title") or "Untitled"
+        seen[title] = seen.get(title, 0) + 1
+        titles[row["_id"]] = title if seen[title] == 1 else f"{title} ({seen[title]})"
+    return titles
+
+
+def _gradebook(rows, student_ids, users, assignments):
+    """One row per enrolled student, one column per assignment: the grade that counts."""
+    titles = _unique_titles(assignments)
+    by_student = group_attempts(rows, "user_id")
+    records = []
+    for uid in sorted(student_ids, key=lambda value: _name(users.get(value)).casefold()):
+        per_assignment = group_attempts(by_student.get(uid, []), "assignment_id")
+        record = {"Student": _name(users.get(uid))}
+        for assignment in assignments:
+            attempts = per_assignment.get(assignment["_id"])
+            record[titles[assignment["_id"]]] = kept_percentage(attempts) if attempts else None
+        record["Awaiting review"] = sum(needs_review(attempts) for attempts in per_assignment.values())
+        records.append(record)
+    columns = {title: st.column_config.NumberColumn(title, format="%.0f%%") for title in titles.values()}
+    columns["Awaiting review"] = st.column_config.NumberColumn(
+        "Awaiting review", help="Assignments where you have not confirmed or overridden Rocky's grade yet.")
+    st.dataframe(records, hide_index=True, column_config=columns)
+    st.caption("Each cell is the grade that counts: your confirmed grade, otherwise the student's highest "
+               "Rocky score. None means not submitted. Choose an assignment above to review attempts.")
+
+
+def _professor_grades(course, assignments):
+    from homework.review_views import REVIEW_SELECTION, review_button, review_submission_dialog
+    from pages.dashboards.professor import _due_sort_key
+    rows = list(db.find("homework_submissions", {"class_id": course["_id"]}))
+    student_ids = {row["user_id"] for row in db.find("students", {"class_id": course["_id"]})}
+    ids = list(student_ids | {row["user_id"] for row in rows})
+    users = {row["_id"]: row for row in db.find("users", {"_id": {"$in": ids}})} if ids else {}
+    submitted = {row["assignment_id"] for row in rows}
+    ordered = [row for row in sorted(assignments, key=_due_sort_key) if row["_id"] in submitted]
+    titles = {str(row["_id"]): row.get("title", "Untitled") for row in ordered}
+    choice = st.selectbox("Assignment", ["overview", *titles], key=f"course_grades_assignment_{course['_id']}",
+                          format_func=lambda value: "All assignments (gradebook)" if value == "overview" else titles[value])
+    if not rows:
+        st.caption("No submissions yet.")
+        return
+    if choice == "overview":
+        _gradebook(rows, student_ids, users, ordered)
+    else:
+        selected = [row for row in rows if str(row["assignment_id"]) == choice]
+        attempt_groups(selected, group_by="user_id", title_of=lambda attempts: _name(users.get(attempts[0]["user_id"])),
+                       key=f"course_grades_{choice}", attempt_action=lambda attempt: review_button(attempt, choice))
+    selection = st.session_state.get(REVIEW_SELECTION)
+    if selection and selection["assignment_id"] in titles:
+        review_submission_dialog(selection["submission_id"], selection["revision"])
+
+
+def _student_grades(course, user):
+    from pages.dashboards.student.student import open_homework
+    uid = db._object_id(user["id"], "user ID")
+    rows = [row for row in list_submissions_for_student(user["id"])
+            if row.get("class_id") == course["_id"] and row.get("user_id") == uid]
+    membership = db.read_one("students", {"user_id": uid, "class_id": course["_id"]}) or {}
+    recorded = membership.get("grade") or {}
+    earned, possible = recorded.get("earned", 0), recorded.get("possible", 0)
+    if (isinstance(earned, (int, float)) and isinstance(possible, (int, float))
+            and isfinite(earned) and isfinite(possible) and possible > 0):
+        with st.expander("Professor-recorded course grade"):
+            st.metric("Recorded grade", f"{earned / possible * 100:.1f}%")
+            st.caption(f"{earned:g}/{possible:g} points entered separately by your professor; these are not added to the assignment totals above.")
+    st.caption("If you submit more than once, your highest score counts until your professor confirms a grade.")
+
+    def open_button(attempt):
+        if st.button("Open", key=f"open_attempt_{attempt['_id']}", icon=":material/open_in_new:"):
+            open_homework(attempt["assignment_id"], return_page="app_pages/course.py")
+    attempt_groups(rows, group_by="assignment_id", title_of=lambda attempts: attempts[0]["assignment_snapshot"]["title"],
+                   key=f"student_grades_{course['_id']}", attempt_action=open_button, noun="assignment",
+                   review_filters=False, empty="No submissions yet.")
+
+
 def show_course(user):
     course_id = st.session_state.get("course_id")
     if not course_id:
@@ -122,8 +207,6 @@ def show_course(user):
         assignments = [row for row in source if row["class_id"] == course["_id"]]
         st.caption("Courses / " + course["name"])
         st.title(course["name"])
-        if not professor:
-            student_course_scores(course_id)
         sections = ["Home", "Assignments", "Grades"] + (["People"] if professor else [])
         section = st.segmented_control("Course navigation", sections, default="Assignments", key=f"course_section_{course_id}",
                                        label_visibility="collapsed") or "Assignments"
@@ -137,51 +220,15 @@ def show_course(user):
                 _manage_class(course_id, user["id"])
             return
         if section == "Grades":
-            st.subheader("Grades")
             if professor:
-                rows = list(db.find("homework_submissions", {"class_id": course["_id"]}))
-                ids = list({row["user_id"] for row in rows})
-                users = {row["_id"]: row for row in db.find("users", {"_id": {"$in": ids}})} if ids else {}
+                _professor_grades(course, assignments)
             else:
-                uid = db._object_id(user["id"], "user ID")
-                rows = [row for row in list_submissions_for_student(user["id"])
-                        if row.get("class_id") == course["_id"] and row.get("user_id") == uid]
-                users = {}
-                membership = db.read_one("students", {"user_id": uid, "class_id": course["_id"]}) or {}
-                recorded = membership.get("grade") or {}
-                earned, possible = recorded.get("earned", 0), recorded.get("possible", 0)
-                if (isinstance(earned, (int, float)) and isinstance(possible, (int, float))
-                        and isfinite(earned) and isfinite(possible) and possible > 0):
-                    with st.expander("Professor-recorded course grade"):
-                        st.metric("Recorded grade", f"{earned / possible * 100:.1f}%")
-                        st.caption(f"{earned:g}/{possible:g} points entered separately by your professor; these are not added to the assignment totals above.")
-            rows.sort(key=lambda row: row["submitted_at"], reverse=True)
-            if not rows:
-                st.caption("No submissions yet.")
-            def grade_row(row):
-                student = users.get(row["user_id"], {})
-                name = " ".join(filter(None, [student.get("first_name"), student.get("last_name")]))
-                def open_grade():
-                    from components.compact_list import close_compact_list
-                    close_compact_list()
-                    if professor:
-                        from homework.review_views import REVIEW_SELECTION
-                        st.session_state.selected_assignment_id = row["assignment_id"]
-                        st.session_state.professor_assignment_return_page = "app_pages/course.py"
-                        st.session_state[REVIEW_SELECTION] = {
-                            "assignment_id": str(row["assignment_id"]), "submission_id": str(row["_id"]),
-                            "revision": row.get("professor_grade_revision", 0),
-                        }
-                        st.switch_page("app_pages/edit_assignment.py")
-                    else:
-                        from pages.dashboards.student.student import open_homework
-                        open_homework(row["assignment_id"], return_page="app_pages/course.py")
-                assignment_row((f"{name} · " if professor else "") + row["assignment_snapshot"]["title"],
-                               row["submitted_at"].strftime("%b %d, %Y"), grading_label(row),
-                               key=f"course_grade_{row['_id']}", open_assignment=open_grade)
-            compact_list(rows, grade_row, title="More grades", key=f"course_grades_{course_id}", columns=2)
+                student_course_scores(course_id)
+                _student_grades(course, user)
             return
         if section == "Home":
+            if not professor:
+                student_course_scores(course_id)
             _course_home(course, assignments, professor)
             return
         if professor:
