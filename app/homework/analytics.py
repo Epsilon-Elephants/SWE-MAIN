@@ -1,9 +1,8 @@
 """Score and topic summaries from saved grades, without exposing answer keys."""
 
 from collections import defaultdict
-from datetime import datetime, timezone
 from math import isfinite
-from homework.grades import effective_grade, confirmed_grade
+from homework.grades import attempt_score, confirmed_grade, kept_attempt
 
 STRUGGLE_THRESHOLD = 70
 
@@ -14,42 +13,28 @@ def valid_score(earned, possible):
             and possible > 0 and 0 <= earned <= possible)
 
 
-def _attempt_order(row):
-    submitted = row.get("submitted_at")
-    if not isinstance(submitted, datetime):
-        submitted = datetime.min.replace(tzinfo=timezone.utc)
-    elif submitted.tzinfo is None:
-        submitted = submitted.replace(tzinfo=timezone.utc)
-    return submitted, str(row.get("_id", ""))
-
-
-def latest_graded_attempts(rows):
-    """Prefer professor decisions, then latest Rocky grades, as course totals do."""
-    latest = {}
-    def order(row):
-        confirmed = confirmed_grade(row)
-        decision = _attempt_order({"submitted_at": confirmed.get("graded_at", row.get("submitted_at"))}) if confirmed else _attempt_order(row)
-        return bool(confirmed), decision, _attempt_order(row)
-    for row in sorted(rows, key=order, reverse=True):
-        result = effective_grade(row) or {}
-        if (row.get("grading_status") == "graded" and row.get("user_id") is not None
-                and row.get("assignment_id") is not None
-                and valid_score(result.get("total_points"), result.get("max_points"))):
-            latest.setdefault((row["user_id"], row["assignment_id"]), row)
-    return list(latest.values())
+def kept_graded_attempts(rows):
+    """One counted attempt per (student, assignment), chosen exactly as course totals do."""
+    groups = {}
+    for row in rows:
+        if row.get("user_id") is not None and row.get("assignment_id") is not None:
+            groups.setdefault((row["user_id"], row["assignment_id"]), []).append(row)
+    kept = (kept_attempt(attempts) for attempts in groups.values())
+    return [row for row in kept if row is not None]
 
 
 def summarize_scores(rows):
     """Average student percentages; weight assignments by points within each student.
 
     Topics use the saved problem labels. A topic is flagged for a student when
-    their combined score for its questions is below 70%, using latest grades.
+    their combined score for its questions is below 70%, using each kept grade
+    (professor decision, otherwise the student's highest Rocky attempt).
     """
-    rows = latest_graded_attempts(rows)
+    rows = kept_graded_attempts(rows)
     students = defaultdict(lambda: [0, 0])
     topics = {}
     for row in rows:
-        result = effective_grade(row)
+        result = confirmed_grade(row) if attempt_score(row)[2] else row["grading_result"]
         total = students[row["user_id"]]
         total[0] += result["total_points"]
         total[1] += result["max_points"]

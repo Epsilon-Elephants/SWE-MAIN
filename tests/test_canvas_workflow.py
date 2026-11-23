@@ -195,6 +195,7 @@ def test_student_course_grades_omit_other_courses_and_private_answers():
         app.segmented_control(key=f"course_section_{cid}").set_value("Grades").run()
         assert not app.exception
         history.assert_called_with(uid)
-        assert app.button(key=f"course_grade_{own_id}")
-        assert not any(button.key == f"course_grade_{other_id}" for button in app.button)
+        assert app.button(key=f"open_attempt_{own_id}")
+        assert not any(button.key == f"open_attempt_{other_id}" for button in app.button)
+        assert [row.label.split(" · ")[0] for row in app.expander if "attempt" in row.label] == ["**My homework**"]
         assert "PRIVATE" not in repr([item.value for item in [*app.markdown, *app.caption, *app.text]])

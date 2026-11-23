@@ -55,7 +55,7 @@ def _render_summary(assignments, now=None):
     columns[1].metric("Due in 7 days", due_soon, border=True)
     columns[2].metric("Submitted", len(assignments) - len(pending), border=True)
     columns[3].metric("Average score", f"{sum(scores) / len(scores):.0f}%" if scores else "—",
-                      help="Average of each assignment's latest attempt. Includes tentative Rocky scores awaiting professor confirmation.",
+                      help="Average of the score that counts on each assignment: your professor's grade, otherwise your highest Rocky score.",
                       border=True)
 
 

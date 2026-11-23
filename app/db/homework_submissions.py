@@ -69,6 +69,27 @@ def summarize_submissions(assignment_ids):
     return {row["_id"]: {"students": row["students"], "attempts": row["attempts"]} for row in rows}
 
 
+def count_awaiting_review(assignment_ids):
+    """{assignment_id: students whose grade the professor has not confirmed yet}.
+
+    One round trip for the dashboard's review queue. A student counts once per
+    assignment no matter how many attempts they submitted.
+    """
+    object_ids = [db._object_id(value, "assignment ID") for value in assignment_ids or []]
+    if not object_ids:
+        return {}
+    confirmed = {"$cond": [{"$and": [{"$eq": ["$grading_status", "graded"]},
+                                     {"$ifNull": ["$professor_grade", False]}]}, 1, 0]}
+    rows = db.aggregate("homework_submissions", [
+        {"$match": {"assignment_id": {"$in": object_ids}}},
+        {"$group": {"_id": {"assignment": "$assignment_id", "student": "$user_id"},
+                    "confirmed": {"$max": confirmed}}},
+        {"$match": {"confirmed": 0}},
+        {"$group": {"_id": "$_id.assignment", "students": {"$sum": 1}}},
+    ])
+    return {row["_id"]: row["students"] for row in rows}
+
+
 def submit_homework(assignment_id, user_id, answers):
     """Validate all answers against current problems and save a new ungraded attempt.
 

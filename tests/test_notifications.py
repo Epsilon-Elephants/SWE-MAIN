@@ -1,5 +1,6 @@
-"""Status popups reflect persisted actions and are consumed once after reruns."""
+"""Banner notifications reflect persisted actions, survive reruns, and can be dismissed."""
 
+import time
 from datetime import date
 from unittest.mock import MagicMock, patch
 
@@ -13,7 +14,12 @@ from db.DataBase import db
 pytestmark = pytest.mark.regression
 
 
-def test_queued_notice_survives_navigation_and_is_not_repeated():
+def banners(app):
+    """Text of every banner-style alert on the page."""
+    return [row.value for kind in ("success", "info", "warning", "error") for row in getattr(app, kind)]
+
+
+def test_queued_banner_survives_navigation_until_dismissed():
     app = AppTest.from_string('''
 from components.notifications import queue_notice, show_notices
 import streamlit as st
@@ -22,22 +28,42 @@ if st.button("Save"):
     queue_notice("Saved successfully.")
     st.rerun()
 ''').run()
-    app.button[0].click().run()
+    next(button for button in app.button if button.label == "Save").click().run()
     assert not app.exception
-    assert [toast.value for toast in app.get("toast")] == ["Saved successfully."]
+    assert banners(app) == ["Saved successfully."]
     app.run()
-    assert not app.get("toast")
+    assert banners(app) == ["Saved successfully."]  # still visible after another rerun
+    next(button for button in app.button if button.label == "Dismiss").click().run()
+    assert banners(app) == []
 
 
-def test_homework_submission_popup_reports_queued_background_grading():
+def test_repeated_notice_shows_one_banner_and_old_banners_expire():
+    app = AppTest.from_string('''
+from components.notifications import notify, show_notices
+import streamlit as st
+if st.button("Save"):
+    notify("Saved.")
+    notify("Saved.")
+show_notices()
+''').run()
+    next(button for button in app.button if button.label == "Save").click().run()
+    assert banners(app) == ["Saved."]
+    app.session_state["status_banners"][0]["at"] = time.time() - 3600
+    app.run()
+    assert banners(app) == []
+
+
+def test_homework_submission_banner_reports_queued_background_grading():
     student, assignment, course, submission = [ObjectId() for _ in range(4)]
     homework = {"_id": assignment, "class_id": course, "title": "Homework",
                 "problems": [{"problem_id": "q", "content": "Explain logic."}]}
     app = AppTest.from_string(f'''
 import streamlit as st
+from components.notifications import show_notices
 from homework.views import show_homework_assignment
 st.session_state.user = {{"id": "{student}", "permissions": "student"}}
 st.session_state.homework_assignment_id = "{assignment}"
+show_notices()
 show_homework_assignment()
 ''')
     with patch("homework.views.get_homework_for_student", return_value=homework), patch(
@@ -50,13 +76,11 @@ show_homework_assignment()
         next(button for button in app.button if button.label == "Submit homework").click().run()
         assert not app.exception
         save.assert_called_once_with(str(assignment), str(student), {"q": "My reasoning."})
-        assert any("Homework saved and queued" in toast.value for toast in app.get("toast"))
-        assert not any("finished grading" in toast.value for toast in app.get("toast"))
-        app.run()
-        assert not app.get("toast")
+        assert any("Homework submitted" in text for text in banners(app))
+        assert not any("finished grading" in text for text in banners(app))
 
 
-def test_retry_queue_popup_survives_rerun():
+def test_retry_queue_banner_survives_rerun():
     submission = ObjectId()
     app = AppTest.from_string(f'''
 from components.notifications import show_notices
@@ -66,10 +90,10 @@ grading_action({{"_id": "{submission}", "grading_status": "failed"}}, "student")
 ''')
     with patch("homework.results.queue_grading") as grade:
         app.run()
-        app.button[0].click().run()
+        next(button for button in app.button if button.label == "Retry grading").click().run()
     assert not app.exception
     grade.assert_called_once_with(str(submission), "student")
-    assert any("queued for Rocky grading" in toast.value for toast in app.get("toast"))
+    assert any("queued for Rocky grading" in text for text in banners(app))
 
 
 @pytest.mark.parametrize("status,expected", [
@@ -79,18 +103,19 @@ grading_action({{"_id": "{submission}", "grading_status": "failed"}}, "student")
 def test_background_status_changes_notify_once(status, expected):
     app = AppTest.from_string('''
 import streamlit as st
-from components.notifications import observe_grading
+from components.notifications import observe_grading, show_notices
+show_notices()
 observe_grading([{"_id": "submission", "grading_status": st.session_state.status}])
 ''')
     app.session_state.status = "ungraded"
     app.run()
-    assert not app.get("toast")
+    assert not banners(app)
     app.session_state.status = status
     app.run()
     assert not app.exception
-    assert any(expected in toast.value for toast in app.get("toast"))
+    assert sum(expected in text for text in banners(app)) == 1
     app.run()
-    assert not app.get("toast")
+    assert sum(expected in text for text in banners(app)) == 1  # shown once, not re-queued
 
 
 def test_opening_an_old_graded_attempt_does_not_replay_completion_popup():
@@ -121,7 +146,7 @@ show_assignment_editor("{assignment}", "{professor}")
         next(button for button in app.button if button.label == "Save problem").click().run()
     assert not app.exception
     toasts = [toast.value for toast in app.get("toast")]
-    assert ("Question 1 saved." in toasts) is saved
+    assert ("Question 1 saved." in [row.value for row in app.success]) is saved
     if not saved:
         assert any("could not be saved" in message for message in toasts)
         assert not app.success

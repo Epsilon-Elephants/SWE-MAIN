@@ -88,7 +88,7 @@ current implementation and do not imply that a bug was previously reported.
 | Classes and grades | Professor ownership, enrollment, grade validation, literal searches, pagination, and class-scoped roster queries. |
 | Homework | Student access, answer validation, automatic problem grades, retries, saved history, and private instructor fields staying out of student pages. |
 | Rocky and pages | Mocked HTTP/stream handling, topic analysis, and existing dashboard/settings/navigation regressions through AppTest. |
-| Dashboard analytics and status | Latest graded attempts, grade averages, private student topic summaries, professor class scoping, and one-time save/grading/chat popups. |
+| Dashboard analytics and status | Counted attempts (professor decision, else highest score), grade averages, private student topic summaries, professor class scoping, and dismissible banner notifications. |
 
 Generate the same reports as CI:
 

@@ -8,6 +8,7 @@ from pymongo.errors import PyMongoError
 from db.DataBase import db
 from homework.grades import effective_grade
 from homework.results import grading_action, grading_label
+from components.notifications import notify
 from homework.review import get_submission_for_review, restore_rocky_grade, save_professor_grade, confirm_rocky_grade
 
 logger = logging.getLogger(__name__)
@@ -20,8 +21,18 @@ def close_review():
 
 def _finish_review(message):
     close_review()
-    st.session_state.professor_grading_notice = message
+    notify(message)
     st.rerun()
+
+
+def review_button(attempt, assignment_id):
+    """Open the grading window for one attempt."""
+    if st.button("Review", key=f"review_submission_{attempt['_id']}", icon=":material/grading:"):
+        st.session_state[REVIEW_SELECTION] = {
+            "assignment_id": str(assignment_id), "submission_id": str(attempt["_id"]),
+            "revision": attempt.get("professor_grade_revision", 0),
+        }
+        st.rerun()
 
 
 @st.dialog("Review student assignment", width="large", on_dismiss=close_review)
