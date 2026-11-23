@@ -69,7 +69,11 @@ def inject_styles():
     st.html(f"""
 <style>
 /* Page rhythm */
-[data-testid="stMainBlockContainer"], .block-container {{ padding-top: 2.25rem; padding-bottom: 3rem; max-width: 1280px; }}
+/* Streamlit's fixed header (~3.75rem) sits over the page. Start content below it so
+   banners at the top are not clipped, and keep it see-through so it never paints a
+   white strip over content while scrolling. */
+[data-testid="stMainBlockContainer"], .block-container {{ padding-top: 4.5rem; padding-bottom: 3rem; max-width: 1280px; }}
+[data-testid="stHeader"] {{ background: transparent; }}
 h1 {{ letter-spacing: -0.02em; }}
 h2, h3, h4, h5 {{ letter-spacing: -0.01em; }}
 
