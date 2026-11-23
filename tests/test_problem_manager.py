@@ -79,3 +79,16 @@ def test_editor_dialog_adds_another_question_to_saved_assignment():
     add.assert_called_once()
     assert add.call_args.args[:2] == (assignment_id, professor_id)
     assert add.call_args.args[2]["content"] == "Second" and add.call_args.args[2]["points"] == 2.0
+
+
+def test_adding_several_problems_does_not_trigger_session_state_widget_warning(caplog):
+    """Resetting the add form must not also pass widget defaults (Streamlit warns on both)."""
+    with patch.object(db, "find", return_value=[{"_id": ObjectId(), "name": "Logic"}]):
+        app = create_page().run()
+        open_problems(app, CREATE)
+        with caplog.at_level("WARNING"):
+            for number in range(1, 3):
+                add_problem(app, CREATE, f"Question text {number}")
+                assert not app.exception
+    assert not [row for row in caplog.records if "created with a default value" in row.getMessage()]
+    assert app.number_input(key=f"new_problem_{CREATE}_points").value == 1.0

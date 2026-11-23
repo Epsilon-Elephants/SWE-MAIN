@@ -12,6 +12,7 @@ import streamlit as st
 
 from homework.grades import attempt_score, group_attempts, kept_attempt
 from homework.results import grading_label
+from components.course_cards import status_color
 
 PAGE_SIZE = 10
 FILTERS = ("All", "Needs review", "Confirmed")
@@ -28,7 +29,7 @@ def kept_summary(attempts):
     if score:
         earned, possible, confirmed = score
         source = "Confirmed" if confirmed else "Highest"
-        return kept, f"{source} {earned:g}/{possible:g} · {100 * earned / possible:.0f}%", "green" if confirmed else "blue"
+        return kept, f"{source} {earned:g}/{possible:g} · {100 * earned / possible:.0f}%", "green" if confirmed else "yellow"
     if any(row.get("grading_status") in {"ungraded", "grading", None} for row in attempts):
         return None, "Processing", "gray"
     return None, "Not graded", "gray"
@@ -103,7 +104,7 @@ def attempt_groups(rows, *, group_by, title_of, key, attempt_action, noun="stude
             for number, attempt in enumerate(attempts):
                 with st.container(horizontal=True, vertical_alignment="center", gap="small"):
                     st.caption(f"Attempt {len(attempts) - number} · {format_time(attempt.get('submitted_at'))}")
-                    st.badge(grading_label(attempt), color="blue" if attempt.get("grading_status") == "graded" else "gray")
+                    st.badge(grading_label(attempt), color=status_color(grading_label(attempt)))
                     if kept is not None and attempt.get("_id") == kept.get("_id"):
                         st.badge("Counts", icon=":material/star:", color="green",
                                  help="This attempt counts toward the grade: the professor's decision, "

@@ -1,5 +1,5 @@
 import streamlit as st
-from components.notifications import show_notices
+from components.notifications import show_notices, watch_grading
 
 st.session_state.setdefault("user", None)
 st.set_page_config(page_title="Philosophy classroom", page_icon=":material/school:", layout="wide",
@@ -44,3 +44,5 @@ if role in {"student", "professor"}:
         st.session_state.clear()
         st.rerun()
 st.navigation(pages, position="sidebar" if user else "hidden").run()
+# After the page runs, so a grading update reruns the page the student is on.
+watch_grading(user)

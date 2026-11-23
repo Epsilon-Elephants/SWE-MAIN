@@ -185,3 +185,50 @@ rocky_dialog()
     messages = [toast.value for toast in app.get("toast")]
     assert any("unavailable" in message for message in messages)
     assert not any("response is ready" in message or "PRIVATE" in message for message in messages)
+
+
+def test_grading_result_replaces_the_submitted_banner_instead_of_stacking():
+    app = AppTest.from_string('''
+import streamlit as st
+from components.notifications import notify, grading_notice, show_notices
+if st.button("Submit"):
+    notify("Homework submitted. Rocky is grading it now.", tag="grading")
+if st.button("Graded"):
+    grading_notice("graded")
+show_notices()
+''').run()
+    next(button for button in app.button if button.label == "Submit").click().run()
+    assert banners(app) == ["Homework submitted. Rocky is grading it now."]
+    next(button for button in app.button if button.label == "Graded").click().run()
+    assert banners(app) == ["Rocky finished grading. Scores and feedback are ready."]
+
+
+def test_grading_banner_appears_on_any_page_while_work_is_being_graded():
+    """The app-level watcher polls the student's in-progress submissions, not just the homework page."""
+    student, submission = ObjectId(), ObjectId()
+    app = AppTest.from_string(f'''
+import streamlit as st
+from components.notifications import show_notices, track_grading, watch_grading
+show_notices()
+st.title("Dashboard")
+if not st.session_state.get("tracked"):
+    track_grading("{submission}")
+    st.session_state.tracked = True
+watch_grading({{"id": "{student}", "permissions": "student"}})
+''')
+    status = {"value": "ungraded"}
+    def find(collection, query):
+        assert collection == "homework_submissions" and query["user_id"] == student
+        return [{"_id": submission, "grading_status": status["value"]}]
+    with patch.object(db, "find", side_effect=find) as lookup:
+        app.run()
+        assert not banners(app)
+        status["value"] = "graded"
+        app.run()
+    assert not app.exception
+    assert banners(app) == ["Rocky finished grading. Scores and feedback are ready."]
+    calls = lookup.call_count
+    with patch.object(db, "find", side_effect=find) as idle:
+        app.run()
+    idle.assert_not_called()  # nothing in progress anymore, so polling stops
+    assert calls >= 2

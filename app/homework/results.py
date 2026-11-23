@@ -55,5 +55,5 @@ def grading_action(submission, actor_id):
     if st.button("Retry grading", key=f"grade_submission_{submission['_id']}"):
         queue_grading(submission["_id"], actor_id)
         track_grading(submission["_id"])
-        queue_notice("Your saved answers were queued for Rocky grading.", icon=":material/send:")
+        queue_notice("Your saved answers were queued for Rocky grading.", icon=":material/send:", tag="grading")
         st.rerun()

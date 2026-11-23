@@ -30,14 +30,17 @@ def grading_fields(content: str, problem=None, *, key_prefix: str):
     problem = problem or {}
     st.caption("Required: question, points, topic, and professor reference answer.")
     points_column, topic_column = st.columns([1, 3])
+    points_key, topic_key = f"{key_prefix}_points", f"{key_prefix}_topic"
+    # The "Add problem" form resets these through Session State. Streamlit warns if a
+    # widget also gets a default value then, so pass the default only on first render.
     points = points_column.number_input(
-        "Points", min_value=0.01, value=float(problem.get("points", 1.0)),
-        step=1.0, key=f"{key_prefix}_points",
+        "Points", min_value=0.01, step=1.0, key=points_key,
+        **({} if points_key in st.session_state else {"value": float(problem.get("points", 1.0))}),
     )
     topic = topic_column.text_input(
         "Topic",
-        value=problem.get("topic", ""),
-        key=f"{key_prefix}_topic",
+        key=topic_key,
+        **({} if topic_key in st.session_state else {"value": problem.get("topic", "")}),
         placeholder="Required · e.g. Propositional logic",
     )
     reference_answer = logic_symbol_editor(

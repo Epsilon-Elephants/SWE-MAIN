@@ -9,7 +9,7 @@ from pymongo.errors import PyMongoError
 from components.logic_symbol_editor import logic_symbol_editor
 from db.DataBase import db
 from components.compact_list import compact_list, close_compact_list
-from components.course_cards import assignment_row
+from components.course_cards import assignment_row, status_color
 from db.assignments import list_assignments_for_student
 from db.homework_submissions import (
     get_homework_for_student, list_submissions_for_student, submit_homework,
@@ -176,7 +176,7 @@ def attempts_dialog(assignment_id, user_id):
     selected = st.selectbox("Attempt", list(by_id), format_func=describe, key=f"attempt_{assignment_id}",
                             index=list(by_id).index(str(kept["_id"])) if kept else 0)
     attempt = by_id[selected]
-    st.badge(grading_label(attempt), color="blue" if attempt.get("grading_status") == "graded" else "gray")
+    st.badge(grading_label(attempt), color=status_color(grading_label(attempt)))
     responses = {row["problem_id"]: row["answer"] for row in attempt["answers"]}
     for number, problem in enumerate(attempt["assignment_snapshot"]["problems"], 1):
         with st.container(border=True):
@@ -234,7 +234,7 @@ def show_homework_assignment():
             submission_id = submit_homework(assignment_id, user["id"], answers)
             track_grading(submission_id)
             notify("Homework submitted. Rocky is grading it now; you'll get a banner when scores are ready.",
-                   icon=":material/send:")
+                   icon=":material/send:", tag="grading")
             st.rerun()
     except ERRORS as error:
         if isinstance(error, ValueError):

@@ -9,15 +9,16 @@ _STATUS_COLORS = (
     ("past due", "red"), ("overdue", "red"), ("due today", "orange"), ("due in", "orange"),
     ("open", "green"), ("published", "green"), ("submitted", "green"), ("graded", "green"), ("confirmed", "green"),
     ("scheduled", "violet"), ("draft", "gray"), ("closed", "gray"), ("not submitted", "gray"),
-    ("pending", "gray"), ("awaiting", "gray"), ("processing", "blue"),
+    ("pending", "gray"), ("awaiting", "gray"), ("processing", "gray"),
+    # Scores: gold while Rocky's grade awaits the professor, green once confirmed.
+    ("tentative", "yellow"), ("highest", "yellow"),
 )
 
 
 def status_color(status):
     label = (status or "").casefold()
-    if label.endswith("%"):
-        return "blue"
-    return next((color for prefix, color in _STATUS_COLORS if label.startswith(prefix)), "gray")
+    color = next((color for prefix, color in _STATUS_COLORS if label.startswith(prefix)), None)
+    return color or ("yellow" if label.endswith("%") else "gray")
 
 
 def open_course(course_id):

@@ -182,8 +182,8 @@ def test_editor_lists_submissions():
     assert not app.exception
     assert not app.dataframe
     # One row per student, with the grade that counts in the dropdown header.
-    assert [row.label for row in app.expander if "attempt" in row.label] == ["**Grace Hopper** · 1 attempt · :blue-badge[Highest 7/10 · 70%]"]
-    assert ":blue-badge[Tentative Rocky score: 7/10 points · 70%]" in [row.value for row in app.markdown]
+    assert [row.label for row in app.expander if "attempt" in row.label] == ["**Grace Hopper** · 1 attempt · :yellow-badge[Highest 7/10 · 70%]"]
+    assert ":yellow-badge[Tentative Rocky score: 7/10 points · 70%]" in [row.value for row in app.markdown]
     assert "Attempt 1 · Nov 05, 2026 14:30 UTC" in [row.value for row in app.caption]
     assert "1 student · 1 attempt · 1 awaiting your review" in [row.value for row in app.caption]
     assert app.button(key=f"review_submission_{rows[0]['_id']}").label == "Review"

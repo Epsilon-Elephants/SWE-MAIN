@@ -93,7 +93,7 @@ def test_professor_sees_one_row_per_student_with_attempts_in_a_dropdown():
     app = grade_list_app(student_rows(3))
     assert not app.exception
     labels = [row.label for row in app.expander]
-    assert labels == [f"**Student {n:02d}** · 3 attempts · :blue-badge[Highest 7/10 · 70%]" for n in range(3)]
+    assert labels == [f"**Student {n:02d}** · 3 attempts · :yellow-badge[Highest 7/10 · 70%]" for n in range(3)]
     assert len([button for button in app.button if button.label == "Review"]) == 9
     assert "3 students · 9 attempts · 3 awaiting your review" in [row.value for row in app.caption]
     # The counted attempt is marked inside each dropdown.

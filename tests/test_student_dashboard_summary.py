@@ -98,7 +98,7 @@ def test_dashboard_shows_summary_submitted_scores_and_course_counts():
     assert "2 assignments · 0 to do" in captions
     assert "Sets · Tentative Rocky score: 9/10 points · 90%" in captions
     badges = [row.value for row in app.markdown]
-    assert ":blue-badge[90%]" in badges and ":gray-badge[Pending]" in badges
+    assert ":yellow-badge[90%]" in badges and ":gray-badge[Pending]" in badges
     # Newest submission first; unsubmitted work stays in To do only.
     submitted_keys = [b.key for b in app.button if (b.key or "").startswith("overview_submitted_")]
     assert submitted_keys == [f"overview_submitted_{pending['_id']}", f"overview_submitted_{graded['_id']}"]
