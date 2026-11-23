@@ -1,9 +1,10 @@
 import streamlit as st
+from components import brand
 from components.notifications import show_notices
 
 st.session_state.setdefault("user", None)
-st.set_page_config(page_title="Philosophy classroom", page_icon=":material/school:", layout="wide",
-                   initial_sidebar_state="auto" if st.session_state.user else "collapsed")
+brand.page_config(signed_in=bool(st.session_state.user))
+brand.inject_styles()
 show_notices()
 user = st.session_state.user or {}
 role = user.get("permissions")
@@ -14,10 +15,10 @@ if role in {"student", "professor"}:
 
 # Signed-out visitors see only the login page, so leave the sidebar empty (and hidden).
 if user:
+    brand.render_logo()
     with st.sidebar:
-        st.markdown("### :material/school: Philosophy classroom")
         name = " ".join(filter(None, [user.get("first_name"), user.get("last_name")]))
-        st.caption((name or user.get("email", "Account")) + (f" · {role.capitalize()}" if role else ""))
+        brand.sidebar_identity(name or user.get("email", "Account"), role)
 
 # Explicit role-scoped routes also prevent legacy pages/ auto-discovery.
 pages = [st.Page("app_pages/overview.py", title="Dashboard", icon=":material/dashboard:", default=True)]
@@ -40,7 +41,9 @@ if role == "student":
     ])
 if role in {"student", "professor"}:
     pages.append(st.Page("app_pages/settings.py", title="Account", icon=":material/settings:"))
-    if st.sidebar.button("Log out", icon=":material/logout:", key="account_logout"):
+    if st.sidebar.button("Log out", icon=":material/logout:", key="account_logout", width="stretch"):
         st.session_state.clear()
         st.rerun()
+    with st.sidebar:
+        brand.sidebar_footer()
 st.navigation(pages, position="sidebar" if user else "hidden").run()

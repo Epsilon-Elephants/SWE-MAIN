@@ -1,16 +1,18 @@
 import streamlit as st
 
 from auth.auth import authenticate_user, register_user
+from components import brand
 
 # Login user using the authorization found in /auth/auth
 # User persistence token will be st.session.state.user if validated
 # We will use that same method to carry user info between pages
 def login_page():
-    introduction, account = st.columns([1, 1], gap="large")
+    st.space("medium")
+    introduction, account = st.columns([6, 5], gap="large")
     with introduction:
-        st.caption("PHILOSOPHY CLASSROOM")
+        brand.hero_lockup()
         st.title("Better questions.\nDeeper understanding.")
-        st.write("A shared workspace for the study of philosophy and logic.")
+        st.write(brand.TAGLINE)
         students, professors = st.columns(2)
         with students.container(border=True, height="stretch"):
             st.markdown("#### :material/edit_note: For students")
@@ -25,16 +27,17 @@ def login_page():
                 "3. **Professor review:** your professor confirms or adjusts the scores that count toward your grade.\n"
                 "4. **Practice:** use feedback and topic recommendations to plan what to study next."
             )
-        st.caption("Students can register here. Professor accounts are provided by your course administrator.")
-    with account:
+        st.caption(f"{brand.APP_NAME} · {brand.INSTITUTION} · Built by {brand.TEAM}")
+    with account, st.container(border=True):
         st.title("Welcome")
+        st.caption("Students can register here. Professor accounts are provided by your course administrator.")
         login_tab, register_tab = st.tabs(["Log in", "Register"])
-    
+
         with login_tab:
             with st.form("login_form"):
                 email = st.text_input("Email", key="login_email")
                 password = st.text_input("Password", type="password", key="login_password")
-                submitted = st.form_submit_button("Log in", type="primary")
+                submitted = st.form_submit_button("Log in", type="primary", width="stretch")
 
             if submitted:
                 user, message = authenticate_user(email, password)
@@ -60,7 +63,7 @@ def login_page():
                     type="password",
                     key="register_confirmation",
                 )
-                submitted = st.form_submit_button("Create account", type="primary")
+                submitted = st.form_submit_button("Create account", type="primary", width="stretch")
 
             if submitted:
                 if password != confirmation:

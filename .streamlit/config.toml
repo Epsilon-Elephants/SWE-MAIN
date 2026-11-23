@@ -1,5 +1,7 @@
-# Academic palette adapted from the Streamlit skill's minimal theme.
-# Built-in fonts keep the interface independent of external font services.
+# Philosophy Classroom brand theme — navy and gold, matching the Rocky mark in
+# app/assets/brand/. Built-in fonts keep the interface independent of external
+# font services. Brand constants also live in app/components/brand.py; keep the
+# two in sync when changing a color.
 [browser]
 gatherUsageStats = false
 
@@ -10,35 +12,37 @@ toolbarMode = "minimal"
 [theme]
 showWidgetBorder = true
 showSidebarBorder = false
-baseRadius = "8px"
-buttonRadius = "6px"
+baseRadius = "10px"
+buttonRadius = "8px"
 font = "sans-serif"
 headingFont = "sans-serif"
-headingFontWeights = [600, 600, 600, 600, 600, 600]
+headingFontWeights = [700, 650, 600, 600, 600, 600]
+baseFontSize = 15
 
 [theme.light]
-primaryColor = "#254D70"
+primaryColor = "#002664"
 backgroundColor = "#FFFFFF"
-secondaryBackgroundColor = "#F5F7FA"
-textColor = "#242D35"
-linkColor = "#254D70"
-borderColor = "#DFE5EB"
-dataframeHeaderBackgroundColor = "#F5F7FA"
-chartCategoricalColors = ["#254D70", "#B58937", "#557565", "#9C6262"]
+secondaryBackgroundColor = "#F4F6FA"
+textColor = "#1D2633"
+linkColor = "#00418A"
+borderColor = "#E1E6EE"
+dataframeHeaderBackgroundColor = "#F4F6FA"
+chartCategoricalColors = ["#002664", "#EAAB00", "#4F7C6A", "#A3545A"]
 
 [theme.dark]
-primaryColor = "#4179A3"
-backgroundColor = "#111D29"
-secondaryBackgroundColor = "#1C2D3D"
-textColor = "#EEF1F5"
-linkColor = "#9ACAF0"
-borderColor = "#415365"
-dataframeHeaderBackgroundColor = "#1C2D3D"
-chartCategoricalColors = ["#9ACAF0", "#E8C46D", "#97C9AE", "#DDA5A5"]
+# Blue rather than gold so white button text keeps enough contrast.
+primaryColor = "#3D7BD9"
+backgroundColor = "#0C1626"
+secondaryBackgroundColor = "#152238"
+textColor = "#EEF2F7"
+linkColor = "#8FB8F0"
+borderColor = "#2A3B55"
+dataframeHeaderBackgroundColor = "#152238"
+chartCategoricalColors = ["#8FB8F0", "#EAAB00", "#8CC4A8", "#E0A0A4"]
 
 [theme.sidebar]
-backgroundColor = "#172D40"
-secondaryBackgroundColor = "#243F56"
-textColor = "#FAF8F2"
-primaryColor = "#E8C46D"
-borderColor = "#3E5366"
+backgroundColor = "#002664"
+secondaryBackgroundColor = "#0E3577"
+textColor = "#F3F6FB"
+primaryColor = "#EAAB00"
+borderColor = "#1F4588"
