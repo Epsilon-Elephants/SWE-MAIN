@@ -20,10 +20,11 @@ headingFontWeights = [700, 650, 600, 600, 600, 600]
 baseFontSize = 15
 
 [theme.light]
-# Warm gold accent marks where to click: primary buttons, selected tabs, and toggles.
-# Deeper than the brand gold so white button text meets WCAG AA (4.6:1). Navy stays
-# the brand color through the sidebar, links, and status badges.
-primaryColor = "#9E6A14"
+# Brand gold marks where to click: primary buttons, selected tabs, and toggles.
+# It matches the gold borders and details; primary buttons use navy text (set in
+# app/components/brand.py) for AA contrast. Navy stays the brand color through the
+# sidebar, links, and status badges.
+primaryColor = "#EAAB00"
 backgroundColor = "#FFFFFF"
 secondaryBackgroundColor = "#F4F6FA"
 textColor = "#1D2633"
@@ -38,8 +39,8 @@ blueBackgroundColor = "#E4ECF4"
 blueTextColor = "#002664"
 
 [theme.dark]
-# Same deep gold: white button text keeps AA contrast on any background.
-primaryColor = "#9E6A14"
+# Same brand gold; navy button text keeps AA contrast.
+primaryColor = "#EAAB00"
 backgroundColor = "#0C1626"
 secondaryBackgroundColor = "#152238"
 textColor = "#EEF2F7"

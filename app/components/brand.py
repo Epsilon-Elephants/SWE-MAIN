@@ -87,6 +87,10 @@ h2, h3, h4, h5 {{ letter-spacing: -0.01em; }}
 [data-testid="stMetric"] {{ padding: .9rem 1rem; }}
 [data-testid="stMetricValue"] {{ font-weight: 700; }}
 
+/* Primary buttons use the brand gold; navy text keeps AA contrast on it */
+[data-testid^="stBaseButton-primary"],
+[data-testid^="stBaseButton-primary"] p {{ color: {NAVY} !important; }}
+
 /* Gold accent under the active sidebar page */
 [data-testid="stSidebarNav"] a[aria-current="page"] {{
   box-shadow: inset 3px 0 0 {GOLD};
