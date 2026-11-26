@@ -91,6 +91,19 @@ h2, h3, h4, h5 {{ letter-spacing: -0.01em; }}
 [data-testid^="stBaseButton-primary"],
 [data-testid^="stBaseButton-primary"] p {{ color: {NAVY} !important; }}
 
+/* Gold text on white is too faint to read, so selected controls keep readable text:
+   segmented controls fill gold with navy text like primary buttons, and selected
+   tabs use the normal text color over their gold underline. */
+[data-testid="stButtonGroup"] button[data-selected],
+[data-testid="stButtonGroup"] button[aria-checked="true"] {{
+  background: {GOLD} !important; border-color: {GOLD} !important;
+  color: {NAVY} !important; font-weight: 600;
+}}
+[data-testid="stButtonGroup"] button[data-selected] *,
+[data-testid="stButtonGroup"] button[aria-checked="true"] * {{ color: {NAVY} !important; }}
+[data-testid="stTab"][aria-selected="true"],
+[data-testid="stTab"][aria-selected="true"] p {{ color: inherit !important; font-weight: 600; }}
+
 /* Gold accent under the active sidebar page */
 [data-testid="stSidebarNav"] a[aria-current="page"] {{
   box-shadow: inset 3px 0 0 {GOLD};
