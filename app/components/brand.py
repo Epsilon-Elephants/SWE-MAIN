@@ -1,4 +1,4 @@
-"""Philosophy Classroom brand: name, assets, and shared page styling.
+"""LogiCourse brand: name, assets, and shared page styling.
 
 Everything visual that identifies the product lives here so pages stay
 consistent: the sidebar logo, favicon, login hero lockup, sidebar footer, and a
@@ -9,7 +9,7 @@ from pathlib import Path
 
 import streamlit as st
 
-APP_NAME = "Philosophy Classroom"
+APP_NAME = "LogiCourse"
 TAGLINE = "Logic and philosophy coursework, with Rocky as your study partner."
 TEAM = "Epsilon Elephants"
 INSTITUTION = "Kent State University"

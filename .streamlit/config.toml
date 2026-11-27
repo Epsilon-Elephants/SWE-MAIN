@@ -1,4 +1,4 @@
-# Philosophy Classroom brand theme — navy and gold, matching the Rocky mark in
+# LogiCourse brand theme — navy and gold, matching the Rocky mark in
 # app/assets/brand/. Built-in fonts keep the interface independent of external
 # font services. Brand constants also live in app/components/brand.py; keep the
 # two in sync when changing a color.

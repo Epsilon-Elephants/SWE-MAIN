@@ -1,4 +1,4 @@
-# Philosophy Classroom
+# LogiCourse
 
 A Streamlit web app for logic and philosophy courses at Kent State, built by
 Epsilon Elephants.
